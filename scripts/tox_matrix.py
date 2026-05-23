@@ -24,7 +24,7 @@ import json
 import re
 import sys
 
-_PY_FACTOR_VERSION: dict[str, str] = {"pypy3": "pypy-3.10"}
+_PY_FACTOR_VERSION: dict[str, str] = {"pypy3": "pypy-3.11"}
 _PY_RE = re.compile(r"^py(\d)(\d+)$")
 
 
