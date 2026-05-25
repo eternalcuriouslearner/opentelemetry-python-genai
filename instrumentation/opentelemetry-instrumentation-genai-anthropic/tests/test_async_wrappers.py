@@ -71,6 +71,9 @@ class _FakeAsyncStream:
         self.final_message = SimpleNamespace(id="msg_final")
         self.response = _FakeAsyncResponse()
 
+    def __aiter__(self):
+        return self
+
     async def __anext__(self):
         if self._events:
             return self._events.pop(0)
@@ -199,7 +202,7 @@ def test_sync_stream_wrapper_exit_fails_and_closes_on_exception():
 
     assert result is False
     assert stream.close_calls == 1
-    assert stopped == [True]
+    assert not stopped
     assert failures == [error]
 
 
@@ -416,7 +419,7 @@ async def test_async_stream_wrapper_exit_fails_and_closes_on_exception():
 
     assert result is False
     assert stream.close_calls == 1
-    assert stopped == [True]
+    assert not stopped
     assert failures == [error]
 
 

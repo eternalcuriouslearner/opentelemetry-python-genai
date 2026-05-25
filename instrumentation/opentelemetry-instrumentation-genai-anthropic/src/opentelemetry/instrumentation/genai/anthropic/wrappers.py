@@ -9,9 +9,13 @@ from typing import (
     Any,
     Callable,
     Generic,
-    Iterator,
     TypeVar,
     cast,
+)
+
+from opentelemetry.util.genai.stream import (
+    AsyncStreamWrapper,
+    SyncStreamWrapper,
 )
 
 from .messages_extractors import set_invocation_response_attributes
@@ -105,88 +109,40 @@ class MessageWrapper:
         return self._message
 
 
-class MessagesStreamWrapper(
-    Generic[ResponseFormatT],
-    Iterator[
-        "RawMessageStreamEvent | ParsedMessageStreamEvent[ResponseFormatT]"
-    ],
-):
-    """Wrapper for Anthropic Stream that handles telemetry."""
-
-    def __init__(
-        self,
-        stream: Stream[RawMessageStreamEvent] | MessageStream[ResponseFormatT],
-        invocation: InferenceInvocation,
-        capture_content: bool,
-    ):
-        self.stream = stream
-        self.invocation = invocation
-        self._message: Message | ParsedMessage[ResponseFormatT] | None = None
-        self._capture_content = capture_content
-        self._finalized = False
-
-    def __enter__(self) -> MessagesStreamWrapper[ResponseFormatT]:
-        return self
-
-    def __exit__(
-        self,
-        exc_type: type[BaseException] | None,
-        exc_val: BaseException | None,
-        exc_tb: TracebackType | None,
-    ) -> bool:
-        try:
-            if exc_val is not None:
-                self._fail(exc_val)
-        finally:
-            self.close()
-        return False
-
-    def close(self) -> None:
-        try:
-            self.stream.close()
-        except Exception as exc:
-            self._fail(exc)
-            raise
-        self._stop()
-
-    def __iter__(self) -> MessagesStreamWrapper[ResponseFormatT]:
-        return self
-
-    def __next__(
-        self,
-    ) -> RawMessageStreamEvent | ParsedMessageStreamEvent[ResponseFormatT]:
-        try:
-            chunk = next(self.stream)
-        except StopIteration:
-            self._stop()
-            raise
-        except Exception as exc:
-            self._fail(exc)
-            raise
-        self._process_chunk(chunk)
-        return chunk
-
-    def __getattr__(self, name: str) -> object:
-        return getattr(self.stream, name)
+class _MessagesStreamMixin(Generic[ResponseFormatT]):
+    _self_invocation: InferenceInvocation
+    _self_message: Message | ParsedMessage[ResponseFormatT] | None
+    _self_capture_content: bool
+    _self_message_finalized: bool
 
     @property
     def response(self):
         return _ResponseProxy(self.stream.response, self._stop)
 
     def _stop(self) -> None:
-        if self._finalized:
+        if self._self_message_finalized:
             return
         _set_response_attributes(
-            self.invocation, self._message, self._capture_content
+            self._self_invocation,
+            self._self_message,
+            self._self_capture_content,
         )
-        self.invocation.stop()
-        self._finalized = True
+        self._self_invocation.stop()
+        self._self_message_finalized = True
+        self._self_finalized = True
 
     def _fail(self, exc: BaseException) -> None:
-        if self._finalized:
+        if self._self_message_finalized:
             return
-        self.invocation.fail(exc)
-        self._finalized = True
+        self._self_invocation.fail(exc)
+        self._self_message_finalized = True
+        self._self_finalized = True
+
+    def _on_stream_end(self) -> None:
+        self._stop()
+
+    def _on_stream_error(self, error: BaseException) -> None:
+        self._fail(error)
 
     def _process_chunk(
         self,
@@ -199,19 +155,61 @@ class MessagesStreamWrapper(
             getattr(self.stream, "current_message_snapshot", None),
         )
         if snapshot is not None:
-            self._message = snapshot
+            self._self_message = snapshot
             return
         if accumulate_event is None:
             return
-        self._message = accumulate_event(
+        self._self_message = accumulate_event(
             event=cast("RawMessageStreamEvent", chunk),
             current_snapshot=cast(
-                "ParsedMessage[ResponseFormatT] | None", self._message
+                "ParsedMessage[ResponseFormatT] | None", self._self_message
             ),
         )
 
 
-class AsyncMessagesStreamWrapper(MessagesStreamWrapper[ResponseFormatT]):
+class MessagesStreamWrapper(
+    _MessagesStreamMixin[ResponseFormatT],
+    SyncStreamWrapper[
+        "RawMessageStreamEvent | ParsedMessageStreamEvent[ResponseFormatT]"
+    ],
+    Generic[ResponseFormatT],
+):
+    """Wrapper for Anthropic Stream that handles telemetry."""
+
+    def __init__(
+        self,
+        stream: Stream[RawMessageStreamEvent] | MessageStream[ResponseFormatT],
+        invocation: InferenceInvocation,
+        capture_content: bool,
+    ):
+        super().__init__(stream)
+        self._self_invocation = invocation
+        self._self_message = None
+        self._self_capture_content = capture_content
+        self._self_message_finalized = False
+
+    @property
+    def stream(
+        self,
+    ) -> Stream[RawMessageStreamEvent] | MessageStream[ResponseFormatT]:
+        return self._self_stream
+
+    @stream.setter
+    def stream(
+        self,
+        stream: Stream[RawMessageStreamEvent] | MessageStream[ResponseFormatT],
+    ) -> None:
+        self._self_stream = stream
+        self._self_iterator = iter(stream)
+
+
+class AsyncMessagesStreamWrapper(
+    _MessagesStreamMixin[ResponseFormatT],
+    AsyncStreamWrapper[
+        "RawMessageStreamEvent | ParsedMessageStreamEvent[ResponseFormatT]"
+    ],
+    Generic[ResponseFormatT],
+):
     """Wrapper for async Anthropic Stream that handles telemetry."""
 
     def __init__(
@@ -221,58 +219,30 @@ class AsyncMessagesStreamWrapper(MessagesStreamWrapper[ResponseFormatT]):
         invocation: InferenceInvocation,
         capture_content: bool,
     ):
-        self.stream = stream
-        self.invocation = invocation
-        self._message: Message | ParsedMessage[ResponseFormatT] | None = None
-        self._capture_content = capture_content
-        self._finalized = False
-
-    async def __aenter__(
-        self,
-    ) -> AsyncMessagesStreamWrapper[ResponseFormatT]:
-        return self
-
-    async def __aexit__(
-        self,
-        exc_type: type[BaseException] | None,
-        exc_val: BaseException | None,
-        exc_tb: TracebackType | None,
-    ) -> bool:
-        try:
-            if exc_val is not None:
-                self._fail(exc_val)
-        finally:
-            await self.close()
-        return False
-
-    async def close(self) -> None:  # type: ignore[override]
-        try:
-            await self.stream.close()
-        except Exception as exc:
-            self._fail(exc)
-            raise
-        self._stop()
-
-    def __aiter__(self) -> AsyncMessagesStreamWrapper[ResponseFormatT]:
-        return self
+        super().__init__(stream)
+        self._self_invocation = invocation
+        self._self_message = None
+        self._self_capture_content = capture_content
+        self._self_message_finalized = False
 
     @property
     def response(self) -> Any:
         return _AsyncResponseProxy(self.stream.response, self._stop)
 
-    async def __anext__(
+    @property
+    def stream(
         self,
-    ) -> RawMessageStreamEvent | ParsedMessageStreamEvent[ResponseFormatT]:
-        try:
-            chunk = await self.stream.__anext__()
-        except StopAsyncIteration:
-            self._stop()
-            raise
-        except Exception as exc:
-            self._fail(exc)
-            raise
-        self._process_chunk(chunk)
-        return chunk
+    ) -> AsyncStream[RawMessageStreamEvent] | AsyncMessageStream[ResponseFormatT]:
+        return self._self_stream
+
+    @stream.setter
+    def stream(
+        self,
+        stream: AsyncStream[RawMessageStreamEvent]
+        | AsyncMessageStream[ResponseFormatT],
+    ) -> None:
+        self._self_stream = stream
+        self._self_aiter = aiter(stream)
 
 
 class MessagesStreamManagerWrapper(Generic[ResponseFormatT]):
