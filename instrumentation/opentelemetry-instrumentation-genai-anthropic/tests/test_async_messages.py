@@ -66,7 +66,9 @@ def _skip_if_cassette_missing_and_no_real_key(request):
         Path(__file__).parent / "cassettes" / f"{request.node.name}.yaml"
     )
     api_key = os.getenv("ANTHROPIC_API_KEY")
-    if not cassette_path.exists() and api_key == "test_anthropic_api_key":
+    if not cassette_path.exists() and (
+        not api_key or api_key == "test_anthropic_api_key"
+    ):
         pytest.skip(
             f"Cassette {cassette_path.name} is missing. "
             "Set a real ANTHROPIC_API_KEY to record it."
@@ -243,13 +245,16 @@ async def test_async_messages_create_connection_error(
 
     client = AsyncAnthropic(base_url="http://localhost:9999")
 
-    with pytest.raises(APIConnectionError):
-        await client.messages.create(
-            model=model,
-            max_tokens=100,
-            messages=messages,
-            timeout=0.1,
-        )
+    try:
+        with pytest.raises(APIConnectionError):
+            await client.messages.create(
+                model=model,
+                max_tokens=100,
+                messages=messages,
+                timeout=0.1,
+            )
+    finally:
+        await client.close()
 
     spans = span_exporter.get_finished_spans()
     assert len(spans) == 1
@@ -366,7 +371,10 @@ async def test_async_messages_create_streaming_iteration(
         stream=True,
     )
 
-    chunks = [chunk async for chunk in stream]
+    chunks = []
+    async with stream:
+        async for chunk in stream:
+            chunks.append(chunk)
     assert len(chunks) > 0
 
     spans = span_exporter.get_finished_spans()
@@ -409,14 +417,17 @@ async def test_async_messages_create_streaming_connection_error(
 
     client = AsyncAnthropic(base_url="http://localhost:9999")
 
-    with pytest.raises(APIConnectionError):
-        await client.messages.create(
-            model=model,
-            max_tokens=100,
-            messages=messages,
-            stream=True,
-            timeout=0.1,
-        )
+    try:
+        with pytest.raises(APIConnectionError):
+            await client.messages.create(
+                model=model,
+                max_tokens=100,
+                messages=messages,
+                stream=True,
+                timeout=0.1,
+            )
+    finally:
+        await client.close()
 
     spans = span_exporter.get_finished_spans()
     assert len(spans) == 1

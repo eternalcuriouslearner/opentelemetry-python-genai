@@ -8,7 +8,6 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING, Any, Awaitable, Callable, Union, cast
 
-from anthropic._streaming import AsyncStream as AnthropicAsyncStream
 from anthropic._streaming import Stream as AnthropicStream
 from anthropic.types import Message as AnthropicMessage
 
@@ -33,11 +32,17 @@ from .wrappers import (
 )
 
 if TYPE_CHECKING:
+    from anthropic._streaming import AsyncStream as AnthropicAsyncStream
     from anthropic.lib.streaming._messages import (  # pylint: disable=no-name-in-module
         MessageStreamManager,
     )
     from anthropic.resources.messages import AsyncMessages, Messages
     from anthropic.types import RawMessageStreamEvent
+
+try:
+    from anthropic._streaming import AsyncStream as _AnthropicAsyncStream
+except ImportError:
+    _AnthropicAsyncStream = None
 
 
 _logger = logging.getLogger(__name__)
@@ -135,12 +140,18 @@ def async_messages_create(
             result: (
                 AnthropicMessage | AnthropicAsyncStream[RawMessageStreamEvent]
             ) = await wrapped(*args, **kwargs)
-            if isinstance(result, AnthropicAsyncStream):
+            if _is_anthropic_async_stream(result):
                 return AsyncMessagesStreamWrapper(
-                    result, invocation, capture_content
+                    cast(
+                        "AnthropicAsyncStream[RawMessageStreamEvent]", result
+                    ),
+                    invocation,
+                    capture_content,
                 )
 
-            wrapper = MessageWrapper(result, capture_content)
+            wrapper = MessageWrapper(
+                cast("AnthropicMessage", result), capture_content
+            )
             wrapper.extract_into(invocation)
             invocation.stop()
             return wrapper.message
@@ -151,6 +162,18 @@ def async_messages_create(
     return cast(
         'Callable[..., Union["AnthropicMessage", "AnthropicAsyncStream[RawMessageStreamEvent]", AsyncMessagesStreamWrapper[None]]]',
         traced_method,
+    )
+
+
+def _is_anthropic_async_stream(result: object) -> bool:
+    if _AnthropicAsyncStream is not None and isinstance(
+        result, _AnthropicAsyncStream
+    ):
+        return True
+    return (
+        hasattr(result, "__anext__")
+        and callable(getattr(result, "close", None))
+        and hasattr(result, "response")
     )
 
 
