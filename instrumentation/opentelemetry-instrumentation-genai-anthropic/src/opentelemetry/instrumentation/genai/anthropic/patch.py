@@ -132,9 +132,9 @@ def async_messages_create(
             handler, instance, args, kwargs, capture_content
         )
         try:
-            result: AnthropicMessage | AnthropicAsyncStream[
-                RawMessageStreamEvent
-            ] = await wrapped(*args, **kwargs)
+            result: (
+                AnthropicMessage | AnthropicAsyncStream[RawMessageStreamEvent]
+            ) = await wrapped(*args, **kwargs)
             if isinstance(result, AnthropicAsyncStream):
                 return AsyncMessagesStreamWrapper(
                     result, invocation, capture_content

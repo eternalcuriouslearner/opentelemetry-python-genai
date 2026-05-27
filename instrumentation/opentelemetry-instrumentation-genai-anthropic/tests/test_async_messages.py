@@ -94,32 +94,25 @@ async def test_async_messages_create_basic(
     span = spans[0]
     assert span.name == f"chat {model}"
     assert span.attributes[GenAIAttributes.GEN_AI_OPERATION_NAME] == "chat"
-    assert (
-        span.attributes[GenAIAttributes.GEN_AI_SYSTEM] == "anthropic"
-    )
+    assert span.attributes[GenAIAttributes.GEN_AI_SYSTEM] == "anthropic"
     assert span.attributes[GenAIAttributes.GEN_AI_REQUEST_MODEL] == model
-    assert (
-        span.attributes[GenAIAttributes.GEN_AI_RESPONSE_ID] == response.id
-    )
+    assert span.attributes[GenAIAttributes.GEN_AI_RESPONSE_ID] == response.id
     assert (
         span.attributes[GenAIAttributes.GEN_AI_RESPONSE_MODEL]
         == response.model
     )
-    assert (
-        span.attributes[GenAIAttributes.GEN_AI_USAGE_INPUT_TOKENS]
-        == expected_input_tokens(response.usage)
-    )
+    assert span.attributes[
+        GenAIAttributes.GEN_AI_USAGE_INPUT_TOKENS
+    ] == expected_input_tokens(response.usage)
     assert (
         span.attributes[GenAIAttributes.GEN_AI_USAGE_OUTPUT_TOKENS]
         == response.usage.output_tokens
     )
-    assert (
-        span.attributes[GenAIAttributes.GEN_AI_RESPONSE_FINISH_REASONS]
-        == (normalize_stop_reason(response.stop_reason),)
+    assert span.attributes[GenAIAttributes.GEN_AI_RESPONSE_FINISH_REASONS] == (
+        normalize_stop_reason(response.stop_reason),
     )
     assert (
-        span.attributes[ServerAttributes.SERVER_ADDRESS]
-        == "api.anthropic.com"
+        span.attributes[ServerAttributes.SERVER_ADDRESS] == "api.anthropic.com"
     )
 
 
@@ -207,10 +200,9 @@ async def test_async_messages_create_token_usage(
     span = spans[0]
     assert GenAIAttributes.GEN_AI_USAGE_INPUT_TOKENS in span.attributes
     assert GenAIAttributes.GEN_AI_USAGE_OUTPUT_TOKENS in span.attributes
-    assert (
-        span.attributes[GenAIAttributes.GEN_AI_USAGE_INPUT_TOKENS]
-        == expected_input_tokens(response.usage)
-    )
+    assert span.attributes[
+        GenAIAttributes.GEN_AI_USAGE_INPUT_TOKENS
+    ] == expected_input_tokens(response.usage)
     assert (
         span.attributes[GenAIAttributes.GEN_AI_USAGE_OUTPUT_TOKENS]
         == response.usage.output_tokens
@@ -319,9 +311,8 @@ async def test_async_messages_create_streaming(
         span.attributes[GenAIAttributes.GEN_AI_USAGE_OUTPUT_TOKENS]
         == output_tokens
     )
-    assert (
-        span.attributes[GenAIAttributes.GEN_AI_RESPONSE_FINISH_REASONS]
-        == (normalize_stop_reason(stop_reason),)
+    assert span.attributes[GenAIAttributes.GEN_AI_RESPONSE_FINISH_REASONS] == (
+        normalize_stop_reason(stop_reason),
     )
 
 
@@ -570,9 +561,8 @@ async def test_async_stream_wrapper_finalize_idempotent(
         span.attributes[GenAIAttributes.GEN_AI_USAGE_OUTPUT_TOKENS]
         == output_tokens
     )
-    assert (
-        span.attributes[GenAIAttributes.GEN_AI_RESPONSE_FINISH_REASONS]
-        == (normalize_stop_reason(stop_reason),)
+    assert span.attributes[GenAIAttributes.GEN_AI_RESPONSE_FINISH_REASONS] == (
+        normalize_stop_reason(stop_reason),
     )
 
 
@@ -597,10 +587,9 @@ async def test_async_messages_create_aggregates_cache_tokens(
 
     assert GEN_AI_USAGE_CACHE_CREATION_INPUT_TOKENS in span.attributes
     assert GEN_AI_USAGE_CACHE_READ_INPUT_TOKENS in span.attributes
-    assert (
-        span.attributes[GenAIAttributes.GEN_AI_USAGE_INPUT_TOKENS]
-        == expected_input_tokens(response.usage)
-    )
+    assert span.attributes[
+        GenAIAttributes.GEN_AI_USAGE_INPUT_TOKENS
+    ] == expected_input_tokens(response.usage)
     assert (
         span.attributes[GenAIAttributes.GEN_AI_USAGE_OUTPUT_TOKENS]
         == response.usage.output_tokens
