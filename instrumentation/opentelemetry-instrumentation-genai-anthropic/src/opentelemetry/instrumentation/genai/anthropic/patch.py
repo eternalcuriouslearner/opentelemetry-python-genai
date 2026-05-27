@@ -6,7 +6,7 @@
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING, Any, Callable, Union, cast
+from typing import TYPE_CHECKING, Any, Awaitable, Callable, Union, cast
 
 from anthropic._streaming import AsyncStream as AnthropicAsyncStream
 from anthropic._streaming import Stream as AnthropicStream
@@ -113,9 +113,11 @@ def async_messages_create(
     async def traced_method(
         wrapped: Callable[
             ...,
-            Union[
-                AnthropicMessage,
-                AnthropicAsyncStream[RawMessageStreamEvent],
+            Awaitable[
+                Union[
+                    AnthropicMessage,
+                    AnthropicAsyncStream[RawMessageStreamEvent],
+                ]
             ],
         ],
         instance: AsyncMessages,
@@ -130,7 +132,9 @@ def async_messages_create(
             handler, instance, args, kwargs, capture_content
         )
         try:
-            result = await wrapped(*args, **kwargs)
+            result: AnthropicMessage | AnthropicAsyncStream[
+                RawMessageStreamEvent
+            ] = await wrapped(*args, **kwargs)
             if isinstance(result, AnthropicAsyncStream):
                 return AsyncMessagesStreamWrapper(
                     result, invocation, capture_content
