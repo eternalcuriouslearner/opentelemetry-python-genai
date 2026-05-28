@@ -115,10 +115,6 @@ class _MessagesStreamMixin(Generic[ResponseFormatT]):
     _self_capture_content: bool
     _self_message_finalized: bool
 
-    @property
-    def response(self):
-        return _ResponseProxy(self.stream.response, self._stop)
-
     def _stop(self) -> None:
         if self._self_message_finalized:
             return
@@ -150,10 +146,7 @@ class _MessagesStreamMixin(Generic[ResponseFormatT]):
         | ParsedMessageStreamEvent[ResponseFormatT],
     ) -> None:
         """Accumulate a final message snapshot from a streaming chunk."""
-        snapshot = cast(
-            "ParsedMessage[ResponseFormatT] | None",
-            getattr(self.stream, "current_message_snapshot", None),
-        )
+        snapshot = self._current_message_snapshot()
         if snapshot is not None:
             self._self_message = snapshot
             return
@@ -165,6 +158,11 @@ class _MessagesStreamMixin(Generic[ResponseFormatT]):
                 "ParsedMessage[ResponseFormatT] | None", self._self_message
             ),
         )
+
+    def _current_message_snapshot(
+        self,
+    ) -> ParsedMessage[ResponseFormatT] | None:
+        return None
 
 
 class MessagesStreamWrapper(
@@ -189,6 +187,10 @@ class MessagesStreamWrapper(
         self._self_message_finalized = False
 
     @property
+    def response(self) -> _ResponseProxy[object]:
+        return _ResponseProxy(self.stream.response, self._stop)
+
+    @property
     def stream(
         self,
     ) -> Stream[RawMessageStreamEvent] | MessageStream[ResponseFormatT]:
@@ -201,6 +203,14 @@ class MessagesStreamWrapper(
     ) -> None:
         self._self_stream = stream
         self._self_iterator = iter(stream)
+
+    def _current_message_snapshot(
+        self,
+    ) -> ParsedMessage[ResponseFormatT] | None:
+        return cast(
+            "ParsedMessage[ResponseFormatT] | None",
+            getattr(self.stream, "current_message_snapshot", None),
+        )
 
 
 class AsyncMessagesStreamWrapper(
@@ -232,7 +242,10 @@ class AsyncMessagesStreamWrapper(
     @property
     def stream(
         self,
-    ) -> AsyncStream[RawMessageStreamEvent] | AsyncMessageStream[ResponseFormatT]:
+    ) -> (
+        AsyncStream[RawMessageStreamEvent]
+        | AsyncMessageStream[ResponseFormatT]
+    ):
         return self._self_stream
 
     @stream.setter
@@ -243,6 +256,14 @@ class AsyncMessagesStreamWrapper(
     ) -> None:
         self._self_stream = stream
         self._self_aiter = aiter(stream)
+
+    def _current_message_snapshot(
+        self,
+    ) -> ParsedMessage[ResponseFormatT] | None:
+        return cast(
+            "ParsedMessage[ResponseFormatT] | None",
+            getattr(self.stream, "current_message_snapshot", None),
+        )
 
 
 class MessagesStreamManagerWrapper(Generic[ResponseFormatT]):

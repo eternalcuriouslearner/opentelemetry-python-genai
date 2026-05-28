@@ -127,9 +127,7 @@ class _ResponseStreamMixin(Generic[TextFormatT]):
         if self._self_response_finalized:
             return
         with self._safe_instrumentation("inference.fail"):
-            self._self_invocation.fail(
-                Error(message=message, type=error_type)
-            )
+            self._self_invocation.fail(Error(message=message, type=error_type))
         self._self_response_finalized = True
         self._self_finalized = True
 
