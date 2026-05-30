@@ -159,7 +159,9 @@ async def test_async_responses_create_basic(
 ):
     _skip_if_not_latest()
 
-    with vcr.use_cassette("test_async_responses_create_basic[content_mode0].yaml"):
+    with vcr.use_cassette(
+        "test_async_responses_create_basic[content_mode0].yaml"
+    ):
         response = await async_openai_client.responses.create(
             model=DEFAULT_MODEL,
             instructions=SYSTEM_INSTRUCTIONS,
@@ -858,7 +860,11 @@ async def test_async_responses_create_with_content_shapes(
 
 @pytest.mark.asyncio()
 async def test_async_responses_create_event_only_no_content_in_span(
-    span_exporter, log_exporter, async_openai_client, instrument_event_only, vcr
+    span_exporter,
+    log_exporter,
+    async_openai_client,
+    instrument_event_only,
+    vcr,
 ):
     _skip_if_not_latest()
 
