@@ -4,7 +4,6 @@
 from __future__ import annotations
 
 from opentelemetry.util.genai.handler import TelemetryHandler
-from opentelemetry.util.genai.types import Error
 
 from .response_extractors import (
     apply_request_attributes,
@@ -48,7 +47,7 @@ def responses_create(handler: TelemetryHandler):
             invocation.stop()
             return result
         except Exception as error:
-            invocation.fail(Error(type=type(error), message=str(error)))
+            invocation.fail(error)
             raise
 
     return traced_method
@@ -83,7 +82,7 @@ def async_responses_create(handler: TelemetryHandler):
             invocation.stop()
             return result
         except Exception as error:
-            invocation.fail(Error(type=type(error), message=str(error)))
+            invocation.fail(error)
             raise
 
     return traced_method
