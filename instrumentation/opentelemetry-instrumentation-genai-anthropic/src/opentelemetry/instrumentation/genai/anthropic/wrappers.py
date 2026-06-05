@@ -113,10 +113,10 @@ class _MessagesStreamMixin(Generic[ResponseFormatT]):
     _self_invocation: InferenceInvocation
     _self_message: Message | ParsedMessage[ResponseFormatT] | None
     _self_capture_content: bool
-    _self_message_finalized: bool
+    _self_message_telemetry_finalized: bool
 
     def _stop(self) -> None:
-        if self._self_message_finalized:
+        if self._self_message_telemetry_finalized:
             return
         _set_response_attributes(
             self._self_invocation,
@@ -124,15 +124,13 @@ class _MessagesStreamMixin(Generic[ResponseFormatT]):
             self._self_capture_content,
         )
         self._self_invocation.stop()
-        self._self_message_finalized = True
-        self._self_finalized = True
+        self._self_message_telemetry_finalized = True
 
     def _fail(self, exc: BaseException) -> None:
-        if self._self_message_finalized:
+        if self._self_message_telemetry_finalized:
             return
         self._self_invocation.fail(exc)
-        self._self_message_finalized = True
-        self._self_finalized = True
+        self._self_message_telemetry_finalized = True
 
     def _on_stream_end(self) -> None:
         self._stop()
@@ -184,7 +182,7 @@ class MessagesStreamWrapper(
         self._self_invocation = invocation
         self._self_message = None
         self._self_capture_content = capture_content
-        self._self_message_finalized = False
+        self._self_message_telemetry_finalized = False
 
     @property
     def response(self) -> _ResponseProxy[object]:
@@ -201,6 +199,7 @@ class MessagesStreamWrapper(
         self,
         stream: Stream[RawMessageStreamEvent] | MessageStream[ResponseFormatT],
     ) -> None:
+        self.__wrapped__ = stream
         self._self_stream = stream
         self._self_iterator = iter(stream)
 
@@ -233,7 +232,7 @@ class AsyncMessagesStreamWrapper(
         self._self_invocation = invocation
         self._self_message = None
         self._self_capture_content = capture_content
-        self._self_message_finalized = False
+        self._self_message_telemetry_finalized = False
 
     @property
     def response(self) -> Any:
@@ -254,6 +253,7 @@ class AsyncMessagesStreamWrapper(
         stream: AsyncStream[RawMessageStreamEvent]
         | AsyncMessageStream[ResponseFormatT],
     ) -> None:
+        self.__wrapped__ = stream
         self._self_stream = stream
         self._self_aiter = aiter(stream)
 

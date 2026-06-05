@@ -5,10 +5,9 @@
 
 from __future__ import annotations
 
-import logging
-from contextlib import AsyncExitStack, ExitStack, contextmanager
+from contextlib import AsyncExitStack, ExitStack
 from types import TracebackType
-from typing import TYPE_CHECKING, Callable, Generator, Generic, TypeVar
+from typing import TYPE_CHECKING, Callable, Generic, TypeVar
 
 from opentelemetry.util.genai.stream import (
     AsyncStreamWrapper,
@@ -40,7 +39,6 @@ if TYPE_CHECKING:
 
     from opentelemetry.util.genai._invocation import GenAIInvocation
 
-_logger = logging.getLogger(__name__)
 TextFormatT = TypeVar("TextFormatT")
 ResponseT = TypeVar("ResponseT")
 
@@ -98,7 +96,7 @@ class _AsyncResponseProxy(Generic[ResponseT]):
 class _ResponseStreamMixin(Generic[TextFormatT]):
     _self_invocation: "GenAIInvocation"
     _self_capture_content: bool
-    _self_response_finalized: bool
+    _self_response_telemetry_finalized: bool
 
     def __init__(
         self,
@@ -107,29 +105,24 @@ class _ResponseStreamMixin(Generic[TextFormatT]):
     ) -> None:
         self._self_invocation = invocation
         self._self_capture_content = capture_content
-        self._self_response_finalized = False
+        self._self_response_telemetry_finalized = False
 
     def _stop(
         self, result: "ParsedResponse[TextFormatT] | Response | None"
     ) -> None:
-        if self._self_response_finalized:
+        if self._self_response_telemetry_finalized:
             return
-        with self._safe_instrumentation("response attribute extraction"):
-            _set_response_attributes(
-                self._self_invocation, result, self._self_capture_content
-            )
-        with self._safe_instrumentation("inference.stop"):
-            self._self_invocation.stop()
-        self._self_response_finalized = True
-        self._self_finalized = True
+        _set_response_attributes(
+            self._self_invocation, result, self._self_capture_content
+        )
+        self._self_invocation.stop()
+        self._self_response_telemetry_finalized = True
 
     def _fail(self, message: str, error_type: type[BaseException]) -> None:
-        if self._self_response_finalized:
+        if self._self_response_telemetry_finalized:
             return
-        with self._safe_instrumentation("inference.fail"):
-            self._self_invocation.fail(Error(message=message, type=error_type))
-        self._self_response_finalized = True
-        self._self_finalized = True
+        self._self_invocation.fail(Error(message=message, type=error_type))
+        self._self_response_telemetry_finalized = True
 
     def _process_chunk(
         self, chunk: "ResponseStreamEvent[TextFormatT]"
@@ -162,19 +155,6 @@ class _ResponseStreamMixin(Generic[TextFormatT]):
             return None
         return _ResponseProxy(response, lambda: self._stop(None))
 
-    @staticmethod
-    @contextmanager
-    def _safe_instrumentation(context: str) -> Generator[None, None, None]:
-        try:
-            yield
-        except Exception:  # pylint: disable=broad-exception-caught
-            _logger.debug(
-                "OpenAI responses instrumentation error during %s",
-                context,
-                exc_info=True,
-                stacklevel=2,
-            )
-
     def process_event(self, event: "ResponseStreamEvent[TextFormatT]") -> None:
         event_type = event.type
         response: "ParsedResponse[TextFormatT] | Response | None" = getattr(
@@ -191,12 +171,11 @@ class _ResponseStreamMixin(Generic[TextFormatT]):
             return
 
         if event_type in {"response.failed", "response.incomplete"}:
-            with self._safe_instrumentation("response attribute extraction"):
-                _set_response_attributes(
-                    self._self_invocation,
-                    response,
-                    self._self_capture_content,
-                )
+            _set_response_attributes(
+                self._self_invocation,
+                response,
+                self._self_capture_content,
+            )
             self._fail(event_type, RuntimeError)
             return
 
@@ -232,6 +211,7 @@ class ResponseStreamWrapper(
 
     @stream.setter
     def stream(self, stream: "ResponseStream[TextFormatT]") -> None:
+        self.__wrapped__ = stream
         self._self_stream = stream
         self._self_iterator = iter(stream)
 
@@ -346,6 +326,7 @@ class AsyncResponseStreamWrapper(
 
     @stream.setter
     def stream(self, stream: "AsyncResponseStream[TextFormatT]") -> None:
+        self.__wrapped__ = stream
         self._self_stream = stream
         self._self_aiter = aiter(stream)
 
