@@ -9,6 +9,7 @@ from typing import (
     Any,
     Callable,
     Generic,
+    Protocol,
     TypeVar,
     cast,
 )
@@ -50,6 +51,11 @@ if TYPE_CHECKING:
 ResponseT = TypeVar("ResponseT")
 ResponseFormatT = TypeVar("ResponseFormatT")
 accumulate_event = cast("Callable[..., Message] | None", _sdk_accumulate_event)
+
+
+class _StreamWrapperWithStream(Protocol):
+    @property
+    def stream(self) -> object: ...
 
 
 def _set_response_attributes(
@@ -144,7 +150,11 @@ class _MessagesStreamMixin(Generic[ResponseFormatT]):
         | ParsedMessageStreamEvent[ResponseFormatT],
     ) -> None:
         """Accumulate a final message snapshot from a streaming chunk."""
-        snapshot = self._current_message_snapshot()
+        stream = cast(_StreamWrapperWithStream, self).stream
+        snapshot = cast(
+            "ParsedMessage[ResponseFormatT] | None",
+            getattr(stream, "current_message_snapshot", None),
+        )
         if snapshot is not None:
             self._self_message = snapshot
             return
@@ -156,11 +166,6 @@ class _MessagesStreamMixin(Generic[ResponseFormatT]):
                 "ParsedMessage[ResponseFormatT] | None", self._self_message
             ),
         )
-
-    def _current_message_snapshot(
-        self,
-    ) -> ParsedMessage[ResponseFormatT] | None:
-        return None
 
 
 class MessagesStreamWrapper(
@@ -202,14 +207,6 @@ class MessagesStreamWrapper(
         self.__wrapped__ = stream
         self._self_stream = stream
         self._self_iterator = iter(stream)
-
-    def _current_message_snapshot(
-        self,
-    ) -> ParsedMessage[ResponseFormatT] | None:
-        return cast(
-            "ParsedMessage[ResponseFormatT] | None",
-            getattr(self.stream, "current_message_snapshot", None),
-        )
 
 
 class AsyncMessagesStreamWrapper(
@@ -256,14 +253,6 @@ class AsyncMessagesStreamWrapper(
         self.__wrapped__ = stream
         self._self_stream = stream
         self._self_aiter = aiter(stream)
-
-    def _current_message_snapshot(
-        self,
-    ) -> ParsedMessage[ResponseFormatT] | None:
-        return cast(
-            "ParsedMessage[ResponseFormatT] | None",
-            getattr(self.stream, "current_message_snapshot", None),
-        )
 
 
 class MessagesStreamManagerWrapper(Generic[ResponseFormatT]):

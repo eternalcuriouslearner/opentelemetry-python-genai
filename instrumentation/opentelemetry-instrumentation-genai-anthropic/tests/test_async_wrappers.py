@@ -39,10 +39,18 @@ def _make_async_stream_wrapper(stream):
 
 
 class _FakeSyncStream:
-    def __init__(self, *, events=None, error=None, close_error=None):
+    def __init__(
+        self,
+        *,
+        events=None,
+        error=None,
+        close_error=None,
+        current_message_snapshot=None,
+    ):
         self._events = list(events or [])
         self._error = error
         self._close_error = close_error
+        self.current_message_snapshot = current_message_snapshot
         self.close_calls = 0
         self.response = _FakeSyncResponse()
 
@@ -63,10 +71,18 @@ class _FakeSyncStream:
 
 
 class _FakeAsyncStream:
-    def __init__(self, *, events=None, error=None, close_error=None):
+    def __init__(
+        self,
+        *,
+        events=None,
+        error=None,
+        close_error=None,
+        current_message_snapshot=None,
+    ):
         self._events = list(events or [])
         self._error = error
         self._close_error = close_error
+        self.current_message_snapshot = current_message_snapshot
         self.close_calls = 0
         self.final_message = SimpleNamespace(id="msg_final")
         self.response = _FakeAsyncResponse()
@@ -243,6 +259,21 @@ def test_sync_stream_wrapper_processes_events_and_stops_on_completion():
         next(wrapper)
 
     assert stopped == [True]
+
+
+def test_sync_stream_wrapper_uses_current_message_snapshot():
+    event = SimpleNamespace(type="message_delta")
+    snapshot = SimpleNamespace(id="msg_sync")
+    stream = _FakeSyncStream(
+        events=[event],
+        current_message_snapshot=snapshot,
+    )
+    wrapper = _make_stream_wrapper(stream)
+
+    result = next(wrapper)
+
+    assert result is event
+    assert wrapper._self_message is snapshot
 
 
 def test_sync_stream_wrapper_fails_and_reraises_stream_errors():
@@ -476,6 +507,22 @@ async def test_async_stream_wrapper_processes_events_and_stops_on_completion():
         await anext(wrapper)
 
     assert stopped == [True]
+
+
+@pytest.mark.asyncio
+async def test_async_stream_wrapper_uses_current_message_snapshot():
+    event = SimpleNamespace(type="message_delta")
+    snapshot = SimpleNamespace(id="msg_async")
+    stream = _FakeAsyncStream(
+        events=[event],
+        current_message_snapshot=snapshot,
+    )
+    wrapper = _make_async_stream_wrapper(stream)
+
+    result = await anext(wrapper)
+
+    assert result is event
+    assert wrapper._self_message is snapshot
 
 
 @pytest.mark.asyncio
