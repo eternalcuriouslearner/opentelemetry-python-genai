@@ -5,8 +5,6 @@
 
 import inspect
 import json
-import os
-from pathlib import Path
 
 import pytest
 from anthropic import APIConnectionError, AsyncAnthropic, NotFoundError
@@ -59,20 +57,6 @@ def _load_span_messages(span, attribute):
     parsed = json.loads(value)
     assert isinstance(parsed, list)
     return parsed
-
-
-def _skip_if_cassette_missing_and_no_real_key(request):
-    cassette_path = (
-        Path(__file__).parent / "cassettes" / f"{request.node.name}.yaml"
-    )
-    api_key = os.getenv("ANTHROPIC_API_KEY")
-    if not cassette_path.exists() and (
-        not api_key or api_key == "test_anthropic_api_key"
-    ):
-        pytest.skip(
-            f"Cassette {cassette_path.name} is missing. "
-            "Set a real ANTHROPIC_API_KEY to record it."
-        )
 
 
 @pytest.mark.asyncio
@@ -389,11 +373,9 @@ async def test_async_messages_create_streaming_iteration(
 @pytest.mark.asyncio
 @pytest.mark.vcr()
 async def test_async_messages_create_streaming_delegates_response_attribute(
-    request, async_anthropic_client, instrument_no_content
+    async_anthropic_client, instrument_no_content
 ):
     """Async stream wrapper should expose attributes from the wrapped stream."""
-    _skip_if_cassette_missing_and_no_real_key(request)
-
     stream = await async_anthropic_client.messages.create(
         model="claude-sonnet-4-20250514",
         max_tokens=100,
@@ -445,10 +427,9 @@ async def test_async_messages_create_streaming_connection_error(
     reason="anthropic SDK too old to support 'tools' parameter",
 )
 async def test_async_messages_create_captures_tool_use_content(
-    request, span_exporter, async_anthropic_client, instrument_with_content
+    span_exporter, async_anthropic_client, instrument_with_content
 ):
     """Test that async tool_use blocks are captured as tool_call parts."""
-    _skip_if_cassette_missing_and_no_real_key(request)
     model = "claude-sonnet-4-20250514"
     messages = [{"role": "user", "content": "What is the weather in SF?"}]
 
@@ -491,10 +472,9 @@ async def test_async_messages_create_captures_tool_use_content(
     reason="anthropic SDK too old to support 'thinking' parameter",
 )
 async def test_async_messages_create_captures_thinking_content(
-    request, span_exporter, async_anthropic_client, instrument_with_content
+    span_exporter, async_anthropic_client, instrument_with_content
 ):
     """Test that async thinking blocks are captured as reasoning parts."""
-    _skip_if_cassette_missing_and_no_real_key(request)
     model = "claude-sonnet-4-20250514"
     messages = [{"role": "user", "content": "What is 17*19? Think first."}]
 
