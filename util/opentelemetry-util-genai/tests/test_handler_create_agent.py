@@ -51,6 +51,11 @@ class _CreateAgentTestBase(TestCase):
     def _get_finished_spans(self):
         return self.span_exporter.get_finished_spans()
 
+    def _get_single_finished_span(self):
+        spans = self._get_finished_spans()
+        self.assertEqual(len(spans), 1)
+        return spans[0]
+
 
 class TelemetryHandlerCreateAgentTest(_CreateAgentTestBase):
     # ------------------------------------------------------------------
@@ -68,24 +73,22 @@ class TelemetryHandlerCreateAgentTest(_CreateAgentTestBase):
         )
         invocation.stop()
 
-        spans = self._get_finished_spans()
-        self.assertEqual(len(spans), 1)
-        self.assertEqual(spans[0].name, "create_agent Math Tutor")
+        span = self._get_single_finished_span()
+        self.assertEqual(span.name, "create_agent Math Tutor")
 
     def test_create_agent_span_name_without_agent_name(self) -> None:
         invocation = self.handler.create_agent("openai")
         invocation.stop()
 
-        spans = self._get_finished_spans()
-        self.assertEqual(len(spans), 1)
-        self.assertEqual(spans[0].name, "create_agent")
+        span = self._get_single_finished_span()
+        self.assertEqual(span.name, "create_agent")
 
     def test_create_agent_span_kind_is_client(self) -> None:
         invocation = self.handler.create_agent("openai")
         invocation.stop()
 
-        spans = self._get_finished_spans()
-        self.assertEqual(spans[0].kind, SpanKind.CLIENT)
+        span = self._get_single_finished_span()
+        self.assertEqual(span.kind, SpanKind.CLIENT)
 
     def test_create_agent_records_monotonic_start(self) -> None:
         with patch("timeit.default_timer", return_value=42.0):
@@ -101,28 +104,26 @@ class TelemetryHandlerCreateAgentTest(_CreateAgentTestBase):
         invocation = self.handler.create_agent("openai")
         invocation.stop()
 
-        spans = self._get_finished_spans()
+        span = self._get_single_finished_span()
         self.assertEqual(
-            spans[0].attributes[GenAI.GEN_AI_OPERATION_NAME], "create_agent"
+            span.attributes[GenAI.GEN_AI_OPERATION_NAME], "create_agent"
         )
 
     def test_stop_sets_provider_name(self) -> None:
         invocation = self.handler.create_agent("openai")
         invocation.stop()
 
-        spans = self._get_finished_spans()
+        span = self._get_single_finished_span()
         self.assertEqual(
-            spans[0].attributes[GenAI.GEN_AI_PROVIDER_NAME], "openai"
+            span.attributes[GenAI.GEN_AI_PROVIDER_NAME], "openai"
         )
 
     def test_stop_sets_request_model(self) -> None:
         invocation = self.handler.create_agent("openai", request_model="gpt-4")
         invocation.stop()
 
-        spans = self._get_finished_spans()
-        self.assertEqual(
-            spans[0].attributes[GenAI.GEN_AI_REQUEST_MODEL], "gpt-4"
-        )
+        span = self._get_single_finished_span()
+        self.assertEqual(span.attributes[GenAI.GEN_AI_REQUEST_MODEL], "gpt-4")
 
     def test_stop_sets_server_address_and_port(self) -> None:
         invocation = self.handler.create_agent(
@@ -132,8 +133,8 @@ class TelemetryHandlerCreateAgentTest(_CreateAgentTestBase):
         )
         invocation.stop()
 
-        spans = self._get_finished_spans()
-        attrs = spans[0].attributes
+        span = self._get_single_finished_span()
+        attrs = span.attributes
         self.assertEqual(
             attrs[server_attributes.SERVER_ADDRESS], "api.openai.com"
         )
@@ -148,8 +149,8 @@ class TelemetryHandlerCreateAgentTest(_CreateAgentTestBase):
         invocation.agent_version = "1.0.0"
         invocation.stop()
 
-        spans = self._get_finished_spans()
-        attrs = spans[0].attributes
+        span = self._get_single_finished_span()
+        attrs = span.attributes
         self.assertEqual(attrs[GenAI.GEN_AI_AGENT_ID], "agent-123")
         self.assertEqual(attrs[GenAI.GEN_AI_AGENT_NAME], "Math Tutor")
         self.assertEqual(attrs[GenAI.GEN_AI_AGENT_DESCRIPTION], "A test agent")
@@ -176,8 +177,8 @@ class TelemetryHandlerCreateAgentTest(_CreateAgentTestBase):
         invocation.system_instruction = [Text(content="teach math")]
         invocation.stop()
 
-        spans = self._get_finished_spans()
-        raw = spans[0].attributes[GenAI.GEN_AI_SYSTEM_INSTRUCTIONS]
+        span = self._get_single_finished_span()
+        raw = span.attributes[GenAI.GEN_AI_SYSTEM_INSTRUCTIONS]
         self.assertIsInstance(raw, str)
         self.assertEqual(
             json.loads(raw),
@@ -191,23 +192,23 @@ class TelemetryHandlerCreateAgentTest(_CreateAgentTestBase):
         invocation.system_instruction = [Text(content="teach math")]
         invocation.stop()
 
-        spans = self._get_finished_spans()
-        self.assertNotIn(GenAI.GEN_AI_SYSTEM_INSTRUCTIONS, spans[0].attributes)
+        span = self._get_single_finished_span()
+        self.assertNotIn(GenAI.GEN_AI_SYSTEM_INSTRUCTIONS, span.attributes)
 
     def test_stop_sets_custom_attributes(self) -> None:
         invocation = self.handler.create_agent("openai")
         invocation.attributes["custom.key"] = "value"
         invocation.stop()
 
-        spans = self._get_finished_spans()
-        self.assertEqual(spans[0].attributes["custom.key"], "value")
+        span = self._get_single_finished_span()
+        self.assertEqual(span.attributes["custom.key"], "value")
 
     def test_stop_omits_none_attributes(self) -> None:
         invocation = self.handler.create_agent("openai")
         invocation.stop()
 
-        spans = self._get_finished_spans()
-        attrs = spans[0].attributes
+        span = self._get_single_finished_span()
+        attrs = span.attributes
         self.assertNotIn(GenAI.GEN_AI_REQUEST_MODEL, attrs)
         self.assertNotIn(server_attributes.SERVER_ADDRESS, attrs)
         self.assertNotIn(server_attributes.SERVER_PORT, attrs)
@@ -224,33 +225,33 @@ class TelemetryHandlerCreateAgentTest(_CreateAgentTestBase):
         invocation = self.handler.create_agent("openai")
         invocation.fail(Error(message="timeout", type=TimeoutError))
 
-        spans = self._get_finished_spans()
-        self.assertEqual(spans[0].status.status_code, StatusCode.ERROR)
-        self.assertEqual(spans[0].status.description, "timeout")
+        span = self._get_single_finished_span()
+        self.assertEqual(span.status.status_code, StatusCode.ERROR)
+        self.assertEqual(span.status.description, "timeout")
 
     def test_fail_sets_error_type_attribute(self) -> None:
         invocation = self.handler.create_agent("openai")
         invocation.fail(Error(message="bad", type=ConnectionError))
 
-        spans = self._get_finished_spans()
-        self.assertEqual(spans[0].attributes["error.type"], "ConnectionError")
+        span = self._get_single_finished_span()
+        self.assertEqual(span.attributes["error.type"], "ConnectionError")
 
     def test_fail_sets_operation_name(self) -> None:
         invocation = self.handler.create_agent("openai")
         invocation.fail(Error(message="err", type=RuntimeError))
 
-        spans = self._get_finished_spans()
+        span = self._get_single_finished_span()
         self.assertEqual(
-            spans[0].attributes[GenAI.GEN_AI_OPERATION_NAME], "create_agent"
+            span.attributes[GenAI.GEN_AI_OPERATION_NAME], "create_agent"
         )
 
     def test_fail_with_exception_instance(self) -> None:
         invocation = self.handler.create_agent("openai")
         invocation.fail(ValueError("oops"))
 
-        spans = self._get_finished_spans()
-        self.assertEqual(spans[0].status.status_code, StatusCode.ERROR)
-        self.assertEqual(spans[0].attributes["error.type"], "ValueError")
+        span = self._get_single_finished_span()
+        self.assertEqual(span.status.status_code, StatusCode.ERROR)
+        self.assertEqual(span.attributes["error.type"], "ValueError")
 
 
 class TelemetryHandlerCreateAgentContextManagerTest(_CreateAgentTestBase):
@@ -264,9 +265,8 @@ class TelemetryHandlerCreateAgentContextManagerTest(_CreateAgentTestBase):
         ) as inv:
             self.assertIsNot(inv.span, INVALID_SPAN)
 
-        spans = self._get_finished_spans()
-        self.assertEqual(len(spans), 1)
-        self.assertEqual(spans[0].name, "create_agent Math Tutor")
+        span = self._get_single_finished_span()
+        self.assertEqual(span.name, "create_agent Math Tutor")
 
     def test_context_manager_default_invocation(self) -> None:
         with self.handler.create_agent("openai") as inv:
@@ -278,8 +278,8 @@ class TelemetryHandlerCreateAgentContextManagerTest(_CreateAgentTestBase):
         with self.handler.create_agent("openai"):
             pass
 
-        spans = self._get_finished_spans()
-        self.assertEqual(spans[0].status.status_code, StatusCode.UNSET)
+        span = self._get_single_finished_span()
+        self.assertEqual(span.status.status_code, StatusCode.UNSET)
 
     def test_context_manager_reraises_exception(self) -> None:
         with pytest.raises(ValueError, match="create failed"):
@@ -291,16 +291,16 @@ class TelemetryHandlerCreateAgentContextManagerTest(_CreateAgentTestBase):
             with self.handler.create_agent("openai"):
                 raise RuntimeError("agent service down")
 
-        spans = self._get_finished_spans()
-        self.assertEqual(spans[0].status.status_code, StatusCode.ERROR)
-        self.assertEqual(spans[0].attributes["error.type"], "RuntimeError")
+        span = self._get_single_finished_span()
+        self.assertEqual(span.status.status_code, StatusCode.ERROR)
+        self.assertEqual(span.attributes["error.type"], "RuntimeError")
 
     def test_context_manager_sets_attributes_on_span(self) -> None:
         with self.handler.create_agent("openai") as inv:
             inv.agent_id = "agent-123"
 
-        spans = self._get_finished_spans()
-        attrs = spans[0].attributes
+        span = self._get_single_finished_span()
+        attrs = span.attributes
         self.assertEqual(attrs[GenAI.GEN_AI_PROVIDER_NAME], "openai")
         self.assertEqual(attrs[GenAI.GEN_AI_AGENT_ID], "agent-123")
 

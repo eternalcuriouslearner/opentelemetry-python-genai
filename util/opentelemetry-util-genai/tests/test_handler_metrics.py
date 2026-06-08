@@ -560,7 +560,9 @@ class TelemetryHandlerCreateAgentMetricsTest(TestBase):
         self.assertAlmostEqual(duration_point.sum, 1.5, places=3)
         self.assertNotIn("gen_ai.client.token.usage", metrics)
 
-    def test_stop_create_agent_excludes_agent_id_from_metrics(self) -> None:
+    def test_stop_create_agent_excludes_agent_identity_from_metrics(
+        self,
+    ) -> None:
         handler = TelemetryHandler(
             tracer_provider=self.tracer_provider,
             meter_provider=self.meter_provider,
