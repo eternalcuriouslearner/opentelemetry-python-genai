@@ -43,18 +43,22 @@ Factory methods on `TelemetryHandler` (`handler.py`):
 - `embedding(provider, request_model, *, server_address, server_port)` → `EmbeddingInvocation`
 - `retrieval(*, data_source_id, provider, request_model, server_address, server_port)` → `RetrievalInvocation`
 - `tool(name, *, arguments, tool_call_id, tool_type, tool_description)` → `ToolInvocation`
+- `create_agent(provider, *, request_model, server_address, server_port, agent_name)` → `CreateAgentInvocation`
+- `invoke_local_agent(provider, *, request_model, agent_name)` → `AgentInvocation`
+- `invoke_remote_agent(provider, *, request_model, server_address, server_port, agent_name)` → `AgentInvocation`
 - `workflow(name)` → `WorkflowInvocation`
 
 The returned object can also be used as a context manager (`with ... as invocation:`) when the span lifetime maps cleanly to a `with` block.
 
 The above factories must map 1:1 to distinct semconv operation types (inference, embeddings,
-retrieval, tool execution, agent invocation, workflow invocation). Names must match the operation
-unambiguously — for example, `create_agent` and `invoke_agent` are different operations, so a
-single `agent()` would be ambiguous and is not acceptable. Add a new factory per operation
-instead.
+retrieval, tool execution, agent creation, agent invocation, workflow invocation). Names must match
+the operation unambiguously — for example, `create_agent` and `invoke_agent` are different
+operations, so a single `agent()` would be ambiguous and is not acceptable. Add a new factory per
+operation instead.
 
-Factory names are Python-style singular verbs (`inference`, `embedding`, `retrieval`, `tool`, `workflow`); the op names
-they map to follow semconv operations.
+Factory names are Python-style singular verbs or explicit operation phrases (`inference`,
+`embedding`, `retrieval`, `tool`, `create_agent`, `invoke_local_agent`, `invoke_remote_agent`,
+`workflow`); the op names they map to follow semconv operations.
 
 Factory methods must accept all attributes that semconv marks as important for sampling
 decisions as parameters, so they are on the span at creation time. Attributes that are also

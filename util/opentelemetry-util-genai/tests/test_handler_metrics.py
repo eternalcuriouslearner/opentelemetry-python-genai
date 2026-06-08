@@ -519,3 +519,129 @@ class TelemetryHandlerRetrievalMetricsTest(TestBase):
         )
         self.assertAlmostEqual(duration_point.sum, 3.0, places=3)
         self.assertNotIn("gen_ai.client.token.usage", metrics)
+
+
+class TelemetryHandlerCreateAgentMetricsTest(TestBase):
+    def _harvest_metrics(self) -> Dict[str, List[Any]]:
+        metrics = self.get_sorted_metrics()
+        metrics_by_name: Dict[str, List[Any]] = {}
+        for metric in metrics or []:
+            points = metric.data.data_points or []
+            metrics_by_name.setdefault(metric.name, []).extend(points)
+        return metrics_by_name
+
+    def test_stop_create_agent_records_duration(self) -> None:
+        handler = TelemetryHandler(
+            tracer_provider=self.tracer_provider,
+            meter_provider=self.meter_provider,
+        )
+        with patch("timeit.default_timer", return_value=1000.0):
+            invocation = handler.create_agent(
+                "openai", request_model="gpt-4"
+            )
+
+        with patch("timeit.default_timer", return_value=1001.5):
+            invocation.stop()
+
+        metrics = self._harvest_metrics()
+        self.assertIn("gen_ai.client.operation.duration", metrics)
+        duration_points = metrics["gen_ai.client.operation.duration"]
+        self.assertEqual(len(duration_points), 1)
+        duration_point = duration_points[0]
+
+        self.assertEqual(
+            duration_point.attributes[GenAI.GEN_AI_OPERATION_NAME],
+            GenAI.GenAiOperationNameValues.CREATE_AGENT.value,
+        )
+        self.assertEqual(
+            duration_point.attributes[GenAI.GEN_AI_PROVIDER_NAME], "openai"
+        )
+        self.assertEqual(
+            duration_point.attributes[GenAI.GEN_AI_REQUEST_MODEL], "gpt-4"
+        )
+        self.assertAlmostEqual(duration_point.sum, 1.5, places=3)
+        self.assertNotIn("gen_ai.client.token.usage", metrics)
+
+    def test_stop_create_agent_excludes_agent_id_from_metrics(self) -> None:
+        handler = TelemetryHandler(
+            tracer_provider=self.tracer_provider,
+            meter_provider=self.meter_provider,
+        )
+        invocation = handler.create_agent(
+            "openai", agent_name="Math Tutor"
+        )
+        invocation.agent_id = "agent-123"
+        invocation.stop()
+
+        metrics = self._harvest_metrics()
+        self.assertIn("gen_ai.client.operation.duration", metrics)
+        duration_points = metrics["gen_ai.client.operation.duration"]
+        self.assertEqual(len(duration_points), 1)
+        duration_point = duration_points[0]
+
+        self.assertNotIn(GenAI.GEN_AI_AGENT_ID, duration_point.attributes)
+        self.assertNotIn(GenAI.GEN_AI_AGENT_NAME, duration_point.attributes)
+        self.assertEqual(
+            duration_point.attributes[GenAI.GEN_AI_PROVIDER_NAME], "openai"
+        )
+
+    def test_stop_create_agent_records_duration_with_additional_attributes(
+        self,
+    ) -> None:
+        handler = TelemetryHandler(
+            tracer_provider=self.tracer_provider,
+            meter_provider=self.meter_provider,
+        )
+        invocation = handler.create_agent(
+            "openai",
+            server_address="api.openai.com",
+            server_port=443,
+        )
+        invocation.metric_attributes = {"custom.create_agent.attr": "val"}
+        invocation.attributes = {"should not be on metrics": "value"}
+        invocation.stop()
+
+        metrics = self._harvest_metrics()
+        self.assertIn("gen_ai.client.operation.duration", metrics)
+        duration_points = metrics["gen_ai.client.operation.duration"]
+        self.assertEqual(len(duration_points), 1)
+        duration_point = duration_points[0]
+
+        self.assertEqual(
+            duration_point.attributes["server.address"], "api.openai.com"
+        )
+        self.assertEqual(duration_point.attributes["server.port"], 443)
+        self.assertEqual(
+            duration_point.attributes["custom.create_agent.attr"], "val"
+        )
+        self.assertIsNone(
+            duration_point.attributes.get("should not be on metrics")
+        )
+
+    def test_fail_create_agent_records_duration_with_error(self) -> None:
+        handler = TelemetryHandler(
+            tracer_provider=self.tracer_provider,
+            meter_provider=self.meter_provider,
+        )
+        with patch("timeit.default_timer", return_value=2000.0):
+            invocation = handler.create_agent("openai")
+
+        error = Error(message="agent create failed", type=ConnectionError)
+        with patch("timeit.default_timer", return_value=2003.0):
+            invocation.fail(error)
+
+        metrics = self._harvest_metrics()
+        self.assertIn("gen_ai.client.operation.duration", metrics)
+        duration_points = metrics["gen_ai.client.operation.duration"]
+        self.assertEqual(len(duration_points), 1)
+        duration_point = duration_points[0]
+
+        self.assertEqual(
+            duration_point.attributes["error.type"], "ConnectionError"
+        )
+        self.assertEqual(
+            duration_point.attributes[GenAI.GEN_AI_OPERATION_NAME],
+            GenAI.GenAiOperationNameValues.CREATE_AGENT.value,
+        )
+        self.assertAlmostEqual(duration_point.sum, 3.0, places=3)
+        self.assertNotIn("gen_ai.client.token.usage", metrics)

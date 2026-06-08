@@ -51,6 +51,9 @@ from opentelemetry.trace import (
     get_tracer,
 )
 from opentelemetry.util.genai._agent_invocation import AgentInvocation
+from opentelemetry.util.genai._create_agent_invocation import (
+    CreateAgentInvocation,
+)
 from opentelemetry.util.genai._inference_invocation import LLMInvocation
 from opentelemetry.util.genai._invocation import Error
 from opentelemetry.util.genai.completion_hook import (
@@ -451,6 +454,37 @@ class TelemetryHandler:
             agent_name=agent_name,
             server_address=server_address,
             server_port=server_port,
+        )
+
+    def create_agent(
+        self,
+        provider: str,
+        *,
+        request_model: str | None = None,
+        server_address: str | None = None,
+        server_port: int | None = None,
+        agent_name: str | None = None,
+    ) -> CreateAgentInvocation:
+        """Returns a create_agent invocation (CLIENT span kind). Starts span when called.
+
+        Returned object can be used as a ContextManager which automatically calls `stop` or `fail`
+        to finalize the span upon exiting. If not used as a ContextManager, the caller is
+        responsible for calling `stop` or `fail` to finalize the span.
+
+        Use for remote services that create GenAI agents.
+
+        Only set data attributes on the invocation object, do not modify the span or context.
+        """
+        return CreateAgentInvocation(
+            self._tracer,
+            self._metrics_recorder,
+            self._logger,
+            self._completion_hook,
+            provider,
+            request_model=request_model,
+            server_address=server_address,
+            server_port=server_port,
+            agent_name=agent_name,
         )
 
     def invoke_local_agent(

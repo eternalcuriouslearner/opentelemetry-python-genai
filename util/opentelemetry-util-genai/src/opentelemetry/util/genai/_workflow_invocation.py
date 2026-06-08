@@ -63,6 +63,11 @@ class WorkflowInvocation(GenAIInvocation):
         """Return sampling-relevant attributes available at span creation time."""
         attrs: dict[str, Any] = {
             GenAI.GEN_AI_OPERATION_NAME: self._operation_name,
+            **(
+                {GenAI.GEN_AI_WORKFLOW_NAME: self.name}
+                if self.name is not None
+                else {}
+            ),
         }
         return attrs
 
@@ -94,6 +99,8 @@ class WorkflowInvocation(GenAIInvocation):
         attributes: dict[str, Any] = {
             GenAI.GEN_AI_OPERATION_NAME: self._operation_name
         }
+        if self.name is not None:
+            attributes[GenAI.GEN_AI_WORKFLOW_NAME] = self.name
         attributes.update(self._get_messages_for_span())
         if error is not None:
             self._apply_error_attributes(error)

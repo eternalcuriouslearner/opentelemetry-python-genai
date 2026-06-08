@@ -107,6 +107,13 @@ class TelemetryHandlerWorkflowTest(_WorkflowTestBase):
             "invoke_workflow",
         )
 
+    def test_stop_workflow_sets_workflow_name_attribute(self) -> None:
+        invocation = self.handler.workflow(name="wf")
+        invocation.stop()
+
+        spans = self._get_finished_spans()
+        self.assertEqual(spans[0].attributes[GenAI.GEN_AI_WORKFLOW_NAME], "wf")
+
     def test_stop_workflow_sets_custom_attributes(self) -> None:
         invocation = self.handler.workflow(name="wf")
         invocation.attributes["custom.key"] = "custom_value"
@@ -216,6 +223,9 @@ class TelemetryHandlerWorkflowSamplingTest(_WorkflowTestBase):
 
         self.assertEqual(
             captured_attributes[GenAI.GEN_AI_OPERATION_NAME], "invoke_workflow"
+        )
+        self.assertEqual(
+            captured_attributes[GenAI.GEN_AI_WORKFLOW_NAME], "my-workflow"
         )
 
         spans = self._get_finished_spans()

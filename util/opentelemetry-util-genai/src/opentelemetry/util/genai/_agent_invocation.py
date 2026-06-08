@@ -25,12 +25,83 @@ from opentelemetry.util.genai.types import (
     ToolDefinition,
 )
 
-# TODO: Migrate to GenAI constants once available in semconv package
-_GEN_AI_AGENT_VERSION = "gen_ai.agent.version"
 _GEN_AI_USAGE_CACHE_CREATION_INPUT_TOKENS = (
     "gen_ai.usage.cache_creation.input_tokens"
 )
 _GEN_AI_USAGE_CACHE_READ_INPUT_TOKENS = "gen_ai.usage.cache_read.input_tokens"
+
+
+def _get_agent_base_attributes(
+    *,
+    operation_name: str,
+    provider: str,
+    request_model: str | None,
+    agent_name: str | None,
+    server_address: str | None,
+    server_port: int | None,
+) -> dict[str, Any]:
+    optional_attrs = (
+        (GenAI.GEN_AI_REQUEST_MODEL, request_model),
+        (GenAI.GEN_AI_AGENT_NAME, agent_name),
+        (server_attributes.SERVER_ADDRESS, server_address),
+        (server_attributes.SERVER_PORT, server_port),
+    )
+    return {
+        GenAI.GEN_AI_OPERATION_NAME: operation_name,
+        GenAI.GEN_AI_PROVIDER_NAME: provider,
+        **{k: v for k, v in optional_attrs if v is not None},
+    }
+
+
+def _get_agent_common_attributes(
+    *,
+    operation_name: str,
+    provider: str,
+    request_model: str | None,
+    server_address: str | None,
+    server_port: int | None,
+    agent_name: str | None,
+    agent_id: str | None,
+    agent_description: str | None,
+    agent_version: str | None,
+) -> dict[str, Any]:
+    optional_attrs = (
+        (GenAI.GEN_AI_REQUEST_MODEL, request_model),
+        (server_attributes.SERVER_ADDRESS, server_address),
+        (server_attributes.SERVER_PORT, server_port),
+        (GenAI.GEN_AI_AGENT_NAME, agent_name),
+        (GenAI.GEN_AI_AGENT_ID, agent_id),
+        (GenAI.GEN_AI_AGENT_DESCRIPTION, agent_description),
+        (GenAI.GEN_AI_AGENT_VERSION, agent_version),
+    )
+    return {
+        GenAI.GEN_AI_OPERATION_NAME: operation_name,
+        GenAI.GEN_AI_PROVIDER_NAME: provider,
+        **{k: v for k, v in optional_attrs if v is not None},
+    }
+
+
+def _get_agent_metric_attributes(
+    *,
+    operation_name: str,
+    provider: str,
+    request_model: str | None,
+    server_address: str | None,
+    server_port: int | None,
+    metric_attributes: dict[str, Any],
+) -> dict[str, Any]:
+    optional_attrs = (
+        (GenAI.GEN_AI_PROVIDER_NAME, provider),
+        (GenAI.GEN_AI_REQUEST_MODEL, request_model),
+        (server_attributes.SERVER_ADDRESS, server_address),
+        (server_attributes.SERVER_PORT, server_port),
+    )
+    attrs: dict[str, Any] = {
+        GenAI.GEN_AI_OPERATION_NAME: operation_name,
+        **{k: v for k, v in optional_attrs if v is not None},
+    }
+    attrs.update(metric_attributes)
+    return attrs
 
 
 class AgentInvocation(GenAIInvocation):
@@ -110,33 +181,27 @@ class AgentInvocation(GenAIInvocation):
 
     def _get_base_attributes(self) -> dict[str, Any]:
         """Return sampling-relevant attributes available at span creation time."""
-        optional_attrs = (
-            (GenAI.GEN_AI_REQUEST_MODEL, self.request_model),
-            (GenAI.GEN_AI_AGENT_NAME, self.agent_name),
-            (server_attributes.SERVER_ADDRESS, self.server_address),
-            (server_attributes.SERVER_PORT, self.server_port),
+        return _get_agent_base_attributes(
+            operation_name=self._operation_name,
+            provider=self.provider,
+            request_model=self.request_model,
+            agent_name=self.agent_name,
+            server_address=self.server_address,
+            server_port=self.server_port,
         )
-        return {
-            GenAI.GEN_AI_OPERATION_NAME: self._operation_name,
-            GenAI.GEN_AI_PROVIDER_NAME: self.provider,
-            **{k: v for k, v in optional_attrs if v is not None},
-        }
 
     def _get_common_attributes(self) -> dict[str, Any]:
-        optional_attrs = (
-            (GenAI.GEN_AI_REQUEST_MODEL, self.request_model),
-            (server_attributes.SERVER_ADDRESS, self.server_address),
-            (server_attributes.SERVER_PORT, self.server_port),
-            (GenAI.GEN_AI_AGENT_NAME, self.agent_name),
-            (GenAI.GEN_AI_AGENT_ID, self.agent_id),
-            (GenAI.GEN_AI_AGENT_DESCRIPTION, self.agent_description),
-            (_GEN_AI_AGENT_VERSION, self.agent_version),
+        return _get_agent_common_attributes(
+            operation_name=self._operation_name,
+            provider=self.provider,
+            request_model=self.request_model,
+            server_address=self.server_address,
+            server_port=self.server_port,
+            agent_name=self.agent_name,
+            agent_id=self.agent_id,
+            agent_description=self.agent_description,
+            agent_version=self.agent_version,
         )
-        return {
-            GenAI.GEN_AI_OPERATION_NAME: self._operation_name,
-            GenAI.GEN_AI_PROVIDER_NAME: self.provider,
-            **{k: v for k, v in optional_attrs if v is not None},
-        }
 
     def _get_request_attributes(self) -> dict[str, Any]:
         optional_attrs = (
@@ -184,18 +249,14 @@ class AgentInvocation(GenAIInvocation):
         )
 
     def _get_metric_attributes(self) -> dict[str, Any]:
-        optional_attrs = (
-            (GenAI.GEN_AI_PROVIDER_NAME, self.provider),
-            (GenAI.GEN_AI_REQUEST_MODEL, self.request_model),
-            (server_attributes.SERVER_ADDRESS, self.server_address),
-            (server_attributes.SERVER_PORT, self.server_port),
+        return _get_agent_metric_attributes(
+            operation_name=self._operation_name,
+            provider=self.provider,
+            request_model=self.request_model,
+            server_address=self.server_address,
+            server_port=self.server_port,
+            metric_attributes=self.metric_attributes,
         )
-        attrs: dict[str, Any] = {
-            GenAI.GEN_AI_OPERATION_NAME: self._operation_name,
-            **{k: v for k, v in optional_attrs if v is not None},
-        }
-        attrs.update(self.metric_attributes)
-        return attrs
 
     def _get_metric_token_counts(self) -> dict[str, int]:
         counts: dict[str, int] = {}

@@ -8,6 +8,7 @@ Users can import everything from this single module:
     from opentelemetry.util.genai.invocation import (
         Error,
         GenAIInvocation,
+        CreateAgentInvocation,
         InferenceInvocation,
         EmbeddingInvocation,
         RetrievalInvocation,
@@ -17,6 +18,9 @@ Users can import everything from this single module:
 """
 
 from opentelemetry.util.genai._agent_invocation import AgentInvocation
+from opentelemetry.util.genai._create_agent_invocation import (
+    CreateAgentInvocation,
+)
 from opentelemetry.util.genai._embedding_invocation import EmbeddingInvocation
 from opentelemetry.util.genai._inference_invocation import InferenceInvocation
 from opentelemetry.util.genai._invocation import (
@@ -31,6 +35,7 @@ from opentelemetry.util.genai._workflow_invocation import WorkflowInvocation
 __all__ = [
     "AgentInvocation",
     "ContextToken",
+    "CreateAgentInvocation",
     "Error",
     "GenAIInvocation",
     "InferenceInvocation",
