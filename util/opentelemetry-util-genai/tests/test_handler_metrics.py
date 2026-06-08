@@ -536,9 +536,7 @@ class TelemetryHandlerCreateAgentMetricsTest(TestBase):
             meter_provider=self.meter_provider,
         )
         with patch("timeit.default_timer", return_value=1000.0):
-            invocation = handler.create_agent(
-                "openai", request_model="gpt-4"
-            )
+            invocation = handler.create_agent("openai", request_model="gpt-4")
 
         with patch("timeit.default_timer", return_value=1001.5):
             invocation.stop()
@@ -567,9 +565,7 @@ class TelemetryHandlerCreateAgentMetricsTest(TestBase):
             tracer_provider=self.tracer_provider,
             meter_provider=self.meter_provider,
         )
-        invocation = handler.create_agent(
-            "openai", agent_name="Math Tutor"
-        )
+        invocation = handler.create_agent("openai", agent_name="Math Tutor")
         invocation.agent_id = "agent-123"
         invocation.stop()
 

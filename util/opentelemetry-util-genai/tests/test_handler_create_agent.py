@@ -116,9 +116,7 @@ class TelemetryHandlerCreateAgentTest(_CreateAgentTestBase):
         )
 
     def test_stop_sets_request_model(self) -> None:
-        invocation = self.handler.create_agent(
-            "openai", request_model="gpt-4"
-        )
+        invocation = self.handler.create_agent("openai", request_model="gpt-4")
         invocation.stop()
 
         spans = self._get_finished_spans()
@@ -154,9 +152,7 @@ class TelemetryHandlerCreateAgentTest(_CreateAgentTestBase):
         attrs = spans[0].attributes
         self.assertEqual(attrs[GenAI.GEN_AI_AGENT_ID], "agent-123")
         self.assertEqual(attrs[GenAI.GEN_AI_AGENT_NAME], "Math Tutor")
-        self.assertEqual(
-            attrs[GenAI.GEN_AI_AGENT_DESCRIPTION], "A test agent"
-        )
+        self.assertEqual(attrs[GenAI.GEN_AI_AGENT_DESCRIPTION], "A test agent")
         self.assertEqual(attrs[GenAI.GEN_AI_AGENT_VERSION], "1.0.0")
 
     # ------------------------------------------------------------------
@@ -358,7 +354,9 @@ class TelemetryHandlerCreateAgentSamplingTest(_CreateAgentTestBase):
             captured_attributes[server_attributes.SERVER_ADDRESS],
             "api.openai.com",
         )
-        self.assertEqual(captured_attributes[server_attributes.SERVER_PORT], 443)
+        self.assertEqual(
+            captured_attributes[server_attributes.SERVER_PORT], 443
+        )
         self.assertEqual(
             captured_attributes[GenAI.GEN_AI_AGENT_NAME], "Math Tutor"
         )
