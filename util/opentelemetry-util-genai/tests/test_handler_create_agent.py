@@ -114,9 +114,7 @@ class TelemetryHandlerCreateAgentTest(_CreateAgentTestBase):
         invocation.stop()
 
         span = self._get_single_finished_span()
-        self.assertEqual(
-            span.attributes[GenAI.GEN_AI_PROVIDER_NAME], "openai"
-        )
+        self.assertEqual(span.attributes[GenAI.GEN_AI_PROVIDER_NAME], "openai")
 
     def test_stop_sets_request_model(self) -> None:
         invocation = self.handler.create_agent("openai", request_model="gpt-4")
