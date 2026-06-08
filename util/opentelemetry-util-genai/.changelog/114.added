@@ -1,0 +1,1 @@
+Add `CreateAgentInvocation` type with `create_agent` span lifecycle, supporting `gen_ai.operation.name=create_agent` spans per the GenAI semantic conventions.
