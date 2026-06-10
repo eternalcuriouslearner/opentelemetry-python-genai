@@ -668,6 +668,9 @@ async def test_async_messages_create_stream_propagation_error(
             self._inner = inner
             self._count = 0
 
+        def __aiter__(self):
+            return self
+
         async def __anext__(self):
             if self._count == 1:
                 raise ConnectionError("connection reset during stream")
