@@ -51,12 +51,10 @@ try:
     )
     _has_tools_param = "tools" in _create_params
     _has_reasoning_param = "reasoning" in _create_params
-    _has_stream_method = hasattr(_responses_module.AsyncResponses, "stream")
 except ImportError:
     HAS_RESPONSES_API = False
     _has_tools_param = False
     _has_reasoning_param = False
-    _has_stream_method = False
 
 
 pytestmark = pytest.mark.skipif(
@@ -90,19 +88,6 @@ def _skip_if_not_latest():
         pytest.skip(
             "Responses create instrumentation only supports the latest experimental semconv path"
         )
-
-
-def _skip_if_no_stream_method():
-    """Skip ``AsyncResponses.stream`` tests when the installed SDK lacks support.
-
-    The Responses API exists in older supported OpenAI SDK versions before the
-    async stream manager method was added. These tests specifically cover
-    ``AsyncResponses.stream`` behavior, so they require both the experimental
-    semconv path and a SDK version that exposes the method.
-    """
-    _skip_if_not_latest()
-    if not _has_stream_method:
-        pytest.skip("AsyncResponses.stream requires a newer openai SDK")
 
 
 async def _collect_completed_response(stream):
@@ -437,7 +422,7 @@ async def test_async_responses_create_streaming(
 async def test_async_responses_stream_connection_error(
     span_exporter, instrument_no_content
 ):
-    _skip_if_no_stream_method()
+    _skip_if_not_latest()
 
     client = AsyncOpenAI(base_url="http://localhost:4242")
 
@@ -464,7 +449,7 @@ async def test_async_responses_stream_captures_content(
     async_openai_client,
     instrument_with_content,
 ):
-    _skip_if_no_stream_method()
+    _skip_if_not_latest()
 
     manager = async_openai_client.responses.stream(
         model=DEFAULT_MODEL,
@@ -494,7 +479,7 @@ async def test_async_responses_stream_captures_content(
 async def test_async_responses_stream_until_done(
     span_exporter, async_openai_client, instrument_no_content
 ):
-    _skip_if_no_stream_method()
+    _skip_if_not_latest()
 
     async with async_openai_client.responses.stream(
         model=DEFAULT_MODEL,
@@ -523,7 +508,7 @@ async def test_async_responses_stream_until_done(
 async def test_async_responses_stream_user_exception(
     span_exporter, async_openai_client, instrument_no_content
 ):
-    _skip_if_no_stream_method()
+    _skip_if_not_latest()
 
     with pytest.raises(ValueError, match="User raised exception"):
         async with async_openai_client.responses.stream(

@@ -45,12 +45,10 @@ try:
     _create_params = set(inspect.signature(_Responses.create).parameters)
     _has_tools_param = "tools" in _create_params
     _has_reasoning_param = "reasoning" in _create_params
-    _has_stream_method = hasattr(_Responses, "stream")
 except ImportError:
     HAS_RESPONSES_API = False
     _has_tools_param = False
     _has_reasoning_param = False
-    _has_stream_method = False
 
 
 pytestmark = pytest.mark.skipif(
@@ -84,19 +82,6 @@ def _skip_if_not_latest():
         pytest.skip(
             "Responses create instrumentation only supports the latest experimental semconv path"
         )
-
-
-def _skip_if_no_stream_method():
-    """Skip ``Responses.stream`` tests when the installed SDK lacks support.
-
-    The Responses API exists in older supported OpenAI SDK versions before the
-    stream manager method was added. These tests specifically cover
-    ``Responses.stream`` behavior, so they require both the experimental
-    semconv path and a SDK version that exposes the method.
-    """
-    _skip_if_not_latest()
-    if not _has_stream_method:
-        pytest.skip("Responses.stream requires a newer openai SDK")
 
 
 def _load_span_messages(span, attribute):
@@ -432,7 +417,7 @@ def test_responses_create_streaming(
 def test_responses_stream_returns_wrapped_manager(
     openai_client, instrument_no_content
 ):
-    _skip_if_no_stream_method()
+    _skip_if_not_latest()
 
     manager = openai_client.responses.stream(
         model=DEFAULT_MODEL,
@@ -446,7 +431,7 @@ def test_responses_stream_returns_wrapped_manager(
 def test_responses_stream_connection_error(
     span_exporter, instrument_no_content
 ):
-    _skip_if_no_stream_method()
+    _skip_if_not_latest()
 
     client = OpenAI(base_url="http://localhost:4242")
 
@@ -472,7 +457,7 @@ def test_responses_stream_captures_content(
     openai_client,
     instrument_with_content,
 ):
-    _skip_if_no_stream_method()
+    _skip_if_not_latest()
 
     with openai_client.responses.stream(
         model=DEFAULT_MODEL,
@@ -499,7 +484,7 @@ def test_responses_stream_captures_content(
 def test_responses_stream_until_done(
     span_exporter, openai_client, instrument_no_content
 ):
-    _skip_if_no_stream_method()
+    _skip_if_not_latest()
 
     with openai_client.responses.stream(
         model=DEFAULT_MODEL,
@@ -527,7 +512,7 @@ def test_responses_stream_until_done(
 def test_responses_stream_user_exception(
     span_exporter, openai_client, instrument_no_content
 ):
-    _skip_if_no_stream_method()
+    _skip_if_not_latest()
 
     with pytest.raises(ValueError, match="User raised exception"):
         with openai_client.responses.stream(
@@ -866,7 +851,7 @@ def test_responses_create_reports_reasoning_tokens(
                 "content": REASONING_PROMPT,
             }
         ],
-        max_output_tokens=1000,
+        max_output_tokens=300,
         timeout=30.0,
     )
 
