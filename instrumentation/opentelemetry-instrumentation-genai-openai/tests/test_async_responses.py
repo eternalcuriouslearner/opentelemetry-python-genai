@@ -15,6 +15,7 @@ from openai import (
 
 from opentelemetry.instrumentation.genai.openai import OpenAIInstrumentor
 from opentelemetry.instrumentation.genai.openai.response_wrappers import (
+    AsyncResponseStreamManagerWrapper,
     AsyncResponseStreamWrapper,
 )
 from opentelemetry.semconv._incubating.attributes import (
@@ -50,10 +51,12 @@ try:
     )
     _has_tools_param = "tools" in _create_params
     _has_reasoning_param = "reasoning" in _create_params
+    _has_stream_method = hasattr(_responses_module.AsyncResponses, "stream")
 except ImportError:
     HAS_RESPONSES_API = False
     _has_tools_param = False
     _has_reasoning_param = False
+    _has_stream_method = False
 
 
 pytestmark = pytest.mark.skipif(
@@ -76,10 +79,30 @@ format '[1,2],[3,4],[5,6]' and prints the transpose in the same format.
 
 
 def _skip_if_not_latest():
+    """Skip Responses API tests outside the latest experimental semconv path.
+
+    Responses instrumentation is implemented with the GenAI latest
+    experimental semantic conventions only. The regular test matrix can still
+    exercise older or non-experimental semconv paths, so those runs should not
+    assert telemetry this instrumentation does not emit.
+    """
     if not is_experimental_mode():
         pytest.skip(
             "Responses create instrumentation only supports the latest experimental semconv path"
         )
+
+
+def _skip_if_no_stream_method():
+    """Skip ``AsyncResponses.stream`` tests when the installed SDK lacks support.
+
+    The Responses API exists in older supported OpenAI SDK versions before the
+    async stream manager method was added. These tests specifically cover
+    ``AsyncResponses.stream`` behavior, so they require both the experimental
+    semconv path and a SDK version that exposes the method.
+    """
+    _skip_if_not_latest()
+    if not _has_stream_method:
+        pytest.skip("AsyncResponses.stream requires a newer openai SDK")
 
 
 async def _collect_completed_response(stream):
@@ -408,6 +431,114 @@ async def test_async_responses_create_streaming(
         request_service_tier="default",
         response_service_tier=getattr(response, "service_tier", None),
     )
+
+
+@pytest.mark.asyncio()
+async def test_async_responses_stream_connection_error(
+    span_exporter, instrument_no_content
+):
+    _skip_if_no_stream_method()
+
+    client = AsyncOpenAI(base_url="http://localhost:4242")
+
+    with pytest.raises(APIConnectionError):
+        async with client.responses.stream(
+            model=DEFAULT_MODEL,
+            input="Hello",
+            timeout=0.1,
+        ):
+            pass
+
+    (span,) = span_exporter.get_finished_spans()
+    assert (
+        span.attributes[GenAIAttributes.GEN_AI_REQUEST_MODEL] == DEFAULT_MODEL
+    )
+    assert span.attributes[ErrorAttributes.ERROR_TYPE] == "APIConnectionError"
+
+
+@pytest.mark.asyncio()
+@pytest.mark.vcr()
+async def test_async_responses_stream_captures_content(
+    span_exporter,
+    log_exporter,
+    async_openai_client,
+    instrument_with_content,
+):
+    _skip_if_no_stream_method()
+
+    manager = async_openai_client.responses.stream(
+        model=DEFAULT_MODEL,
+        instructions=SYSTEM_INSTRUCTIONS,
+        input=USER_ONLY_PROMPT[0]["content"],
+    )
+    assert isinstance(manager, AsyncResponseStreamManagerWrapper)
+    async with manager as stream:
+        response = await _collect_completed_response(stream)
+
+    (span,) = span_exporter.get_finished_spans()
+    assert_all_attributes(
+        span,
+        DEFAULT_MODEL,
+        True,
+        response.id,
+        response.model,
+        response.usage.input_tokens,
+        response.usage.output_tokens,
+        response_service_tier=getattr(response, "service_tier", None),
+    )
+    _assert_response_content(span, response, log_exporter)
+
+
+@pytest.mark.asyncio()
+@pytest.mark.vcr()
+async def test_async_responses_stream_until_done(
+    span_exporter, async_openai_client, instrument_no_content
+):
+    _skip_if_no_stream_method()
+
+    async with async_openai_client.responses.stream(
+        model=DEFAULT_MODEL,
+        instructions=SYSTEM_INSTRUCTIONS,
+        input=USER_ONLY_PROMPT[0]["content"],
+        service_tier="default",
+    ) as stream:
+        response = await stream.get_final_response()
+
+    (span,) = span_exporter.get_finished_spans()
+    assert_all_attributes(
+        span,
+        DEFAULT_MODEL,
+        True,
+        response.id,
+        response.model,
+        response.usage.input_tokens,
+        response.usage.output_tokens,
+        request_service_tier="default",
+        response_service_tier=getattr(response, "service_tier", None),
+    )
+
+
+@pytest.mark.asyncio()
+@pytest.mark.vcr()
+async def test_async_responses_stream_user_exception(
+    span_exporter, async_openai_client, instrument_no_content
+):
+    _skip_if_no_stream_method()
+
+    with pytest.raises(ValueError, match="User raised exception"):
+        async with async_openai_client.responses.stream(
+            model=DEFAULT_MODEL,
+            instructions=SYSTEM_INSTRUCTIONS,
+            input=USER_ONLY_PROMPT[0]["content"],
+        ) as stream:
+            async for _ in stream:
+                raise ValueError("User raised exception")
+
+    (span,) = span_exporter.get_finished_spans()
+    assert (
+        span.attributes[GenAIAttributes.GEN_AI_REQUEST_MODEL] == DEFAULT_MODEL
+    )
+    assert span.attributes[ErrorAttributes.ERROR_TYPE] == "ValueError"
 
 
 @pytest.mark.asyncio()
