@@ -116,7 +116,9 @@ def responses_create(
                 )
 
             set_invocation_response_attributes(
-                invocation, cast("ResponseResult", parsed_result), capture_content
+                invocation,
+                cast("ResponseResult", parsed_result),
+                capture_content,
             )
             invocation.stop()
             return result
@@ -193,7 +195,9 @@ def async_responses_create(
                 )
 
             set_invocation_response_attributes(
-                invocation, cast("ResponseResult", parsed_result), capture_content
+                invocation,
+                cast("ResponseResult", parsed_result),
+                capture_content,
             )
             invocation.stop()
             return result

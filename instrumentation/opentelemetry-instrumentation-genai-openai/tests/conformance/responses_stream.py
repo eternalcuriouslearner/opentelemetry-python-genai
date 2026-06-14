@@ -44,9 +44,7 @@ class ResponsesStreamScenario(Scenario):
             semconv="gen_ai_latest_experimental",
             content_capture="SPAN_ONLY",
         ):
-            with vcr.use_cassette(
-                "responses_stream_conformance.yaml"
-            ):
+            with vcr.use_cassette("responses_stream_conformance.yaml"):
                 with OpenAI().responses.stream(
                     model=DEFAULT_MODEL,
                     instructions=SYSTEM_INSTRUCTIONS,
