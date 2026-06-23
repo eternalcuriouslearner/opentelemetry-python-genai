@@ -67,15 +67,11 @@ from wrapt import wrap_function_wrapper
 from opentelemetry.instrumentation.genai.openai.package import _instruments
 from opentelemetry.instrumentation.instrumentor import BaseInstrumentor
 from opentelemetry.instrumentation.utils import unwrap
-from opentelemetry.metrics import get_meter
-from opentelemetry.semconv.schemas import Schemas
-from opentelemetry.trace import get_tracer
 from opentelemetry.util.genai.completion_hook import load_completion_hook
 from opentelemetry.util.genai.handler import (
     TelemetryHandler,
 )
 
-from .instruments import Instruments
 from .patch import (
     async_chat_completions_create_v_new,
     async_embeddings_create,
@@ -107,7 +103,6 @@ def _is_parse_supported():
 
 class OpenAIInstrumentor(BaseInstrumentor):
     def __init__(self):
-        self._meter = None
         self._parse_supported = False
 
     def instrumentation_dependencies(self) -> Collection[str]:
@@ -117,22 +112,8 @@ class OpenAIInstrumentor(BaseInstrumentor):
         """Enable OpenAI instrumentation."""
 
         tracer_provider = kwargs.get("tracer_provider")
-        tracer = get_tracer(
-            __name__,
-            "",
-            tracer_provider,
-            schema_url=Schemas.V1_30_0.value,  # only used on the legacy path
-        )
         logger_provider = kwargs.get("logger_provider")
         meter_provider = kwargs.get("meter_provider")
-        self._meter = get_meter(
-            __name__,
-            "",
-            meter_provider,
-            schema_url=Schemas.V1_30_0.value,  # only used on the legacy path
-        )
-
-        instruments = Instruments(self._meter)
 
         handler = TelemetryHandler(
             tracer_provider=tracer_provider,
@@ -158,13 +139,13 @@ class OpenAIInstrumentor(BaseInstrumentor):
         wrap_function_wrapper(
             "openai.resources.embeddings",
             "Embeddings.create",
-            embeddings_create(tracer, instruments, True),
+            embeddings_create(handler),
         )
 
         wrap_function_wrapper(
             "openai.resources.embeddings",
             "AsyncEmbeddings.create",
-            async_embeddings_create(tracer, instruments, True),
+            async_embeddings_create(handler),
         )
 
         # parse() wraps create() internally in the OpenAI SDK and returns a
