@@ -12,9 +12,22 @@ from opentelemetry.util.genai._invocation import Error, GenAIInvocation
 from opentelemetry.util.genai.completion_hook import CompletionHook
 from opentelemetry.util.genai.metrics import InvocationMetricsRecorder
 from opentelemetry.util.genai.utils import (
+    gen_ai_json_dumps,
     should_capture_content_on_spans,
 )
-from opentelemetry.util.types import AttributeValue
+from opentelemetry.util.types import AnyValue, AttributeValue
+
+
+def _any_value_to_attribute_value(value: AnyValue) -> AttributeValue | None:
+    """Serialize an AnyValue to an AttributeValue for OTel span attributes."""
+    if value is None:
+        return None
+    if isinstance(value, (bool, str, bytes, int, float)):
+        return value
+    try:
+        return gen_ai_json_dumps(value)
+    except (TypeError, ValueError):
+        return str(value)
 
 
 class ToolInvocation(GenAIInvocation):
@@ -61,12 +74,12 @@ class ToolInvocation(GenAIInvocation):
         )
         self.should_capture_content_on_span = should_capture_content_on_spans()
         self.name = name
-        self.tool_result: AttributeValue | None = None
+        self.tool_result: AnyValue | None = None
         # Since arguments and tool_result can be expensive to serialize,
         # it's recommended to check the content capture flag in the
         # instrumentation library before assigning these attributes
         # to the invocation.
-        self.arguments: AttributeValue | None = None
+        self.arguments: AnyValue | None = None
         self.tool_call_id = tool_call_id
         self.tool_type = tool_type
         self.tool_description = tool_description
@@ -102,14 +115,16 @@ class ToolInvocation(GenAIInvocation):
             (GenAI.GEN_AI_TOOL_DESCRIPTION, self.tool_description),
             (
                 GenAI.GEN_AI_TOOL_CALL_ARGUMENTS,
-                self.arguments
+                _any_value_to_attribute_value(self.arguments)
                 if self.should_capture_content_on_span
+                and self.arguments is not None
                 else None,
             ),
             (
                 GenAI.GEN_AI_TOOL_CALL_RESULT,
-                self.tool_result
+                _any_value_to_attribute_value(self.tool_result)
                 if self.should_capture_content_on_span
+                and self.tool_result is not None
                 else None,
             ),
         )
