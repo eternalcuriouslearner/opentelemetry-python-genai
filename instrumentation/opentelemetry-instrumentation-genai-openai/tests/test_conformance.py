@@ -34,12 +34,7 @@ from .conformance.tool_calling import ToolCallingScenario
     "scenario",
     [
         InferenceScenario(),
-        pytest.param(
-            EmbeddingScenario(),
-            marks=pytest.mark.skip(
-                reason="openai-v2 embeddings emit legacy gen_ai.system in experimental mode"
-            ),
-        ),
+        EmbeddingScenario(),
         ToolCallingScenario(),
         ResponsesConversationScenario(),
         ResponsesStreamScenario(),
