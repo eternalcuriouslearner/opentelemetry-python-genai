@@ -335,6 +335,7 @@ class AsyncMessagesStreamManagerWrapper(Generic[ResponseFormatT]):
         if callable(invocation):
             invocation_factory = invocation
         else:
+
             def invocation_factory() -> InferenceInvocation:
                 return invocation
 
