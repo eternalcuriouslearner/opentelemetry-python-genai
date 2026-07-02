@@ -58,7 +58,9 @@ def _load_span_messages(span, attribute):
 
 
 def _assert_parsed_response(response) -> None:
-    parsed_blocks = [getattr(block, "parsed", None) for block in response.content]
+    parsed_blocks = [
+        getattr(block, "parsed", None) for block in response.content
+    ]
     text_blocks = [getattr(block, "text", None) for block in response.content]
     text_payloads = [
         json.loads(text)
