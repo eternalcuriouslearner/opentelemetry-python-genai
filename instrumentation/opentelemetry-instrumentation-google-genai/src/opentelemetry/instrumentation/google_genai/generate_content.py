@@ -357,7 +357,10 @@ def _apply_response_attributes(
     finish_reasons: list[str],
     invocation: InferenceInvocation,
 ):
-    invocation.response_id = response.response_id
+    if response.response_id:
+        invocation.response_id = response.response_id
+    if response.model_version:
+        invocation.response_model_name = response.model_version
     for candidate in response.candidates or []:
         if candidate.finish_reason:
             finish_reasons.append(candidate.finish_reason.value.lower())
