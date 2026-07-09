@@ -75,7 +75,9 @@ def _assert_parsed_response(response) -> None:
 def _assert_parse_span(span, *, model: str, response) -> None:
     assert span.name == f"chat {model}"
     assert span.attributes[GenAIAttributes.GEN_AI_OPERATION_NAME] == "chat"
-    assert span.attributes[GenAIAttributes.GEN_AI_PROVIDER_NAME] == "anthropic"
+    assert span.attributes[GenAIAttributes.GEN_AI_PROVIDER_NAME] == (
+        GenAIAttributes.GenAiProviderNameValues.ANTHROPIC.value
+    )
     assert span.attributes[GenAIAttributes.GEN_AI_REQUEST_MODEL] == model
     assert span.attributes[GenAIAttributes.GEN_AI_RESPONSE_ID] == response.id
     assert (

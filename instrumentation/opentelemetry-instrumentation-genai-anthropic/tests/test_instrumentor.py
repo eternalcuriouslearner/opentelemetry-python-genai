@@ -40,7 +40,9 @@ def _assert_chat_span(span_exporter, model: str) -> None:
     span = spans[0]
     assert span.name == f"chat {model}"
     assert span.attributes[GenAIAttributes.GEN_AI_OPERATION_NAME] == "chat"
-    assert span.attributes[GenAIAttributes.GEN_AI_PROVIDER_NAME] == "anthropic"
+    assert span.attributes[GenAIAttributes.GEN_AI_PROVIDER_NAME] == (
+        GenAIAttributes.GenAiProviderNameValues.ANTHROPIC.value
+    )
     assert span.attributes[GenAIAttributes.GEN_AI_REQUEST_MODEL] == model
     assert span.attributes[GenAIAttributes.GEN_AI_RESPONSE_ID] == "msg_test"
     assert span.attributes[GenAIAttributes.GEN_AI_RESPONSE_MODEL] == model

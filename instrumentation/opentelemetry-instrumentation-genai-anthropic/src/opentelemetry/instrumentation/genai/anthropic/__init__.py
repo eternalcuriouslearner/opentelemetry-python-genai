@@ -54,17 +54,18 @@ from .patch import (
 
 
 def _is_parse_supported() -> bool:
-    """Check if the parse() method is available on the Messages class.
+    """Check if parse() is available on the Messages classes.
 
     Messages.parse() for structured outputs was added in a newer anthropic
     SDK release; create() and stream() are always present.
     """
     try:
         from anthropic.resources.messages import (  # pylint: disable=import-outside-toplevel  # noqa: PLC0415
+            AsyncMessages,
             Messages,
         )
 
-        return hasattr(Messages, "parse")
+        return hasattr(Messages, "parse") and hasattr(AsyncMessages, "parse")
     except ImportError:
         return False
 
