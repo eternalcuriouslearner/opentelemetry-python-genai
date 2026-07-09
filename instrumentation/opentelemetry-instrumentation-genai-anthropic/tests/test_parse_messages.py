@@ -4,8 +4,6 @@
 """Tests for Messages.parse instrumentation."""
 
 import json
-import os
-from pathlib import Path
 
 import pytest
 from anthropic import NotFoundError
@@ -34,18 +32,6 @@ pytestmark = pytest.mark.skipif(
 
 class Greeting(BaseModel):
     greeting: str
-
-
-def _skip_if_cassette_missing_and_no_real_key(request):
-    cassette_path = (
-        Path(__file__).parent / "cassettes" / f"{request.node.name}.yaml"
-    )
-    api_key = os.getenv("ANTHROPIC_API_KEY")
-    if not cassette_path.exists() and api_key == "test_anthropic_api_key":
-        pytest.skip(
-            f"Cassette {cassette_path.name} is missing. "
-            "Set a real ANTHROPIC_API_KEY to record it."
-        )
 
 
 def _load_span_messages(span, attribute):
@@ -105,10 +91,9 @@ def _assert_parse_span(span, *, model: str, response) -> None:
 
 @pytest.mark.vcr()
 def test_sync_messages_parse_basic(
-    request, span_exporter, anthropic_client, instrument_no_content
+    span_exporter, anthropic_client, instrument_no_content
 ):
     """Messages.parse should emit a chat span for structured output."""
-    _skip_if_cassette_missing_and_no_real_key(request)
     model = "claude-haiku-4-5"
 
     response = anthropic_client.messages.parse(
@@ -132,10 +117,9 @@ def test_sync_messages_parse_basic(
 
 @pytest.mark.vcr()
 def test_sync_messages_parse_captures_content(
-    request, span_exporter, anthropic_client, instrument_with_content
+    span_exporter, anthropic_client, instrument_with_content
 ):
     """Messages.parse should capture input and output messages."""
-    _skip_if_cassette_missing_and_no_real_key(request)
     model = "claude-haiku-4-5"
 
     anthropic_client.messages.parse(
@@ -168,10 +152,9 @@ def test_sync_messages_parse_captures_content(
 
 @pytest.mark.vcr()
 def test_sync_messages_parse_api_error(
-    request, span_exporter, anthropic_client, instrument_no_content
+    span_exporter, anthropic_client, instrument_no_content
 ):
     """Messages.parse should record API errors."""
-    _skip_if_cassette_missing_and_no_real_key(request)
     model = "invalid-model-name"
 
     with pytest.raises(NotFoundError):
@@ -193,10 +176,9 @@ def test_sync_messages_parse_api_error(
 @pytest.mark.asyncio
 @pytest.mark.vcr()
 async def test_async_messages_parse_basic(
-    request, span_exporter, async_anthropic_client, instrument_no_content
+    span_exporter, async_anthropic_client, instrument_no_content
 ):
     """AsyncMessages.parse should emit a chat span for structured output."""
-    _skip_if_cassette_missing_and_no_real_key(request)
     model = "claude-haiku-4-5"
 
     response = await async_anthropic_client.messages.parse(
@@ -221,10 +203,9 @@ async def test_async_messages_parse_basic(
 @pytest.mark.asyncio
 @pytest.mark.vcr()
 async def test_async_messages_parse_captures_content(
-    request, span_exporter, async_anthropic_client, instrument_with_content
+    span_exporter, async_anthropic_client, instrument_with_content
 ):
     """AsyncMessages.parse should capture input and output messages."""
-    _skip_if_cassette_missing_and_no_real_key(request)
     model = "claude-haiku-4-5"
 
     await async_anthropic_client.messages.parse(
@@ -258,10 +239,9 @@ async def test_async_messages_parse_captures_content(
 @pytest.mark.asyncio
 @pytest.mark.vcr()
 async def test_async_messages_parse_api_error(
-    request, span_exporter, async_anthropic_client, instrument_no_content
+    span_exporter, async_anthropic_client, instrument_no_content
 ):
     """AsyncMessages.parse should record API errors."""
-    _skip_if_cassette_missing_and_no_real_key(request)
     model = "invalid-model-name"
 
     with pytest.raises(NotFoundError):

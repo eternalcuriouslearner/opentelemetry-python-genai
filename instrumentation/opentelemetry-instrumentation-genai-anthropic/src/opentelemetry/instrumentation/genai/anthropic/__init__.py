@@ -81,7 +81,7 @@ class AnthropicInstrumentor(BaseInstrumentor):
         self._tracer = None
         self._logger = None
         self._meter = None
-        self._parse_supported = False
+        self._parse_supported = _is_parse_supported()
 
     # pylint: disable=no-self-use
     def instrumentation_dependencies(self) -> Collection[str]:
@@ -132,7 +132,6 @@ class AnthropicInstrumentor(BaseInstrumentor):
         # parsed message whose telemetry-relevant fields match Message, so the
         # existing create() wrappers handle it correctly. It was added in a
         # newer SDK release, so only wrap it when present.
-        self._parse_supported = _is_parse_supported()
         if self._parse_supported:
             wrap_function_wrapper(
                 "anthropic.resources.messages",

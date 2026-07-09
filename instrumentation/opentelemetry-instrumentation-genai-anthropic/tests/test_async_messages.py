@@ -5,8 +5,6 @@
 
 import inspect
 import json
-import os
-from pathlib import Path
 
 import pytest
 from anthropic import APIConnectionError, AsyncAnthropic, NotFoundError
@@ -59,18 +57,6 @@ def _load_span_messages(span, attribute):
     parsed = json.loads(value)
     assert isinstance(parsed, list)
     return parsed
-
-
-def _skip_if_cassette_missing_and_no_real_key(request):
-    cassette_path = (
-        Path(__file__).parent / "cassettes" / f"{request.node.name}.yaml"
-    )
-    api_key = os.getenv("ANTHROPIC_API_KEY")
-    if not cassette_path.exists() and api_key == "test_anthropic_api_key":
-        pytest.skip(
-            f"Cassette {cassette_path.name} is missing. "
-            "Set a real ANTHROPIC_API_KEY to record it."
-        )
 
 
 class _AsyncErrorInjectingStreamDelegate:
@@ -427,10 +413,9 @@ async def test_async_messages_create_streaming_delegates_response_attribute(
 @pytest.mark.asyncio
 @pytest.mark.vcr()
 async def test_async_messages_stream(  # pylint: disable=too-many-locals
-    request, span_exporter, async_anthropic_client, instrument_no_content
+    span_exporter, async_anthropic_client, instrument_no_content
 ):
     """Test AsyncMessages.stream produces correct span."""
-    _skip_if_cassette_missing_and_no_real_key(request)
     model = "claude-haiku-4-5"
     messages = [{"role": "user", "content": "Say hello in one word."}]
 
@@ -480,10 +465,9 @@ async def test_async_messages_stream(  # pylint: disable=too-many-locals
 @pytest.mark.asyncio
 @pytest.mark.vcr()
 async def test_async_messages_stream_captures_content(
-    request, span_exporter, async_anthropic_client, instrument_with_content
+    span_exporter, async_anthropic_client, instrument_with_content
 ):
     """Test content capture on AsyncMessages.stream."""
-    _skip_if_cassette_missing_and_no_real_key(request)
     model = "claude-haiku-4-5"
     messages = [{"role": "user", "content": "Say hello in one word."}]
 
@@ -514,11 +498,9 @@ async def test_async_messages_stream_captures_content(
 @pytest.mark.asyncio
 @pytest.mark.vcr()
 async def test_async_messages_stream_delegates_response_attribute(
-    request, async_anthropic_client, instrument_no_content
+    async_anthropic_client, instrument_no_content
 ):
     """AsyncMessages.stream wrapper should expose wrapped response attributes."""
-    _skip_if_cassette_missing_and_no_real_key(request)
-
     async with async_anthropic_client.messages.stream(
         model="claude-haiku-4-5",
         max_tokens=100,
@@ -532,10 +514,9 @@ async def test_async_messages_stream_delegates_response_attribute(
 @pytest.mark.asyncio
 @pytest.mark.vcr()
 async def test_async_messages_stream_api_error(
-    request, span_exporter, async_anthropic_client, instrument_no_content
+    span_exporter, async_anthropic_client, instrument_no_content
 ):
     """Test that API errors from AsyncMessages.stream are propagated."""
-    _skip_if_cassette_missing_and_no_real_key(request)
     model = "invalid-model-name"
     messages = [{"role": "user", "content": "Hello"}]
 
@@ -559,14 +540,12 @@ async def test_async_messages_stream_api_error(
 @pytest.mark.asyncio
 @pytest.mark.vcr()
 async def test_async_messages_stream_interrupted_mid_iteration(
-    request,
     span_exporter,
     async_anthropic_client,
     instrument_no_content,
     monkeypatch,
 ):
     """Mid-stream errors from AsyncMessages.stream propagate and record error."""
-    _skip_if_cassette_missing_and_no_real_key(request)
     model = "claude-haiku-4-5"
     messages = [{"role": "user", "content": "Say hello in one word."}]
 
@@ -596,10 +575,9 @@ async def test_async_messages_stream_interrupted_mid_iteration(
 @pytest.mark.asyncio
 @pytest.mark.vcr()
 async def test_async_messages_stream_closed_early_by_caller(
-    request, span_exporter, async_anthropic_client, instrument_no_content
+    span_exporter, async_anthropic_client, instrument_no_content
 ):
     """Caller-closing AsyncMessages.stream early finalizes without error."""
-    _skip_if_cassette_missing_and_no_real_key(request)
     model = "claude-haiku-4-5"
     messages = [{"role": "user", "content": "Say hello in one word."}]
 
@@ -621,10 +599,9 @@ async def test_async_messages_stream_closed_early_by_caller(
 @pytest.mark.asyncio
 @pytest.mark.vcr()
 async def test_async_messages_stream_user_exception(
-    request, span_exporter, async_anthropic_client, instrument_no_content
+    span_exporter, async_anthropic_client, instrument_no_content
 ):
     """Test that user raised exceptions from AsyncMessages.stream propagate."""
-    _skip_if_cassette_missing_and_no_real_key(request)
     model = "claude-haiku-4-5"
     messages = [{"role": "user", "content": "Say hello in one word."}]
 
