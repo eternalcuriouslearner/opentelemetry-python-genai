@@ -184,8 +184,6 @@ def test_messages_parse_is_instrumented(
         tracer_provider=tracer_provider,
         logger_provider=logger_provider,
         meter_provider=meter_provider,
-        semconv="stable",
-        content_capture="NO_CONTENT",
     ):
         response = Anthropic().messages.parse(
             model=model,
@@ -226,8 +224,6 @@ async def test_async_messages_parse_is_instrumented(
             tracer_provider=tracer_provider,
             logger_provider=logger_provider,
             meter_provider=meter_provider,
-            semconv="stable",
-            content_capture="NO_CONTENT",
         ):
             response = await client.messages.parse(
                 model=model,
@@ -302,8 +298,6 @@ async def test_async_messages_stream_is_instrumented(
             tracer_provider=tracer_provider,
             logger_provider=logger_provider,
             meter_provider=meter_provider,
-            semconv="stable",
-            content_capture="NO_CONTENT",
         ):
             manager = client.messages.stream(
                 model=model,
