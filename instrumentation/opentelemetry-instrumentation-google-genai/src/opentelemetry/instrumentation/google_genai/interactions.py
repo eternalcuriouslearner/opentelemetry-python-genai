@@ -131,6 +131,8 @@ def _apply_interaction_response_attributes(
     telemetry_handler: TelemetryHandler,
 ) -> None:
     invocation.response_model_name = response.model
+    if getattr(response, "id", None):
+        invocation.response_id = response.id
 
     usage = response.usage or Usage()
 
