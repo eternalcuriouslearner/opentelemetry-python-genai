@@ -8,13 +8,19 @@ OpenTelemetry Claude Agent SDK Instrumentation
 Instrumentation for the `Claude Agent SDK
 <https://github.com/anthropics/claude-agent-sdk-python>`_.
 
+The Claude Agent SDK runs an agent loop through the bundled Claude Code
+CLI, so telemetry is emitted at the agent level: ``query()`` and each
+``ClaudeSDKClient.receive_response()`` turn produce ``invoke_agent`` spans,
+tool executions produce ``execute_tool`` spans, and subagent runs produce
+nested ``invoke_agent`` spans.
+
 Usage
 -----
 
 .. code-block:: python
 
     from opentelemetry.instrumentation.genai.claude_agent_sdk import ClaudeAgentSDKInstrumentor
-    from claude_agent_sdk import ClaudeAgentOptions, AgentDefinition, AssistantMessage, TextBlock, query
+    from claude_agent_sdk import AssistantMessage, TextBlock, query
 
     # Enable instrumentation
     ClaudeAgentSDKInstrumentor().instrument()
@@ -23,18 +29,7 @@ Usage
     import anyio
 
     async def main():
-        options = ClaudeAgentOptions(
-            agents={
-                "assistant": AgentDefinition(
-                    description="A helpful assistant",
-                    prompt="You are a helpful assistant.",
-                    tools=["Read"],
-                    model="sonnet",
-                ),
-            },
-        )
-
-        async for message in query(prompt="Hello!", options=options):
+        async for message in query(prompt="Hello!"):
             if isinstance(message, AssistantMessage):
                 for block in message.content:
                     if isinstance(block, TextBlock):
@@ -52,30 +47,34 @@ API
 ---
 """
 
+from __future__ import annotations
+
+import importlib
 from typing import Any, Collection
 
-from opentelemetry._logs import get_logger
+from wrapt import wrap_function_wrapper
+
 from opentelemetry.instrumentation.genai.claude_agent_sdk.package import (
     _instruments,
 )
+from opentelemetry.instrumentation.genai.claude_agent_sdk.patch import (
+    client_connect_wrapper,
+    client_query_wrapper,
+    client_receive_response_wrapper,
+    query_wrapper,
+)
 from opentelemetry.instrumentation.instrumentor import BaseInstrumentor
-from opentelemetry.metrics import get_meter
-from opentelemetry.semconv.schemas import Schemas
-from opentelemetry.trace import get_tracer
+from opentelemetry.instrumentation.utils import unwrap
+from opentelemetry.util.genai.handler import TelemetryHandler
 
 
 class ClaudeAgentSDKInstrumentor(BaseInstrumentor):
     """An instrumentor for the Claude Agent SDK.
 
-    This instrumentor will automatically trace Anthropic API calls and
-    optionally capture message content as events.
+    This instrumentor traces agent runs (``query()`` and
+    ``ClaudeSDKClient`` response turns), tool executions, and subagent runs,
+    and optionally captures message content.
     """
-
-    def __init__(self) -> None:
-        super().__init__()
-        self._tracer = None
-        self._logger = None
-        self._meter = None
 
     # pylint: disable=no-self-use
     def instrumentation_dependencies(self) -> Collection[str]:
@@ -89,47 +88,58 @@ class ClaudeAgentSDKInstrumentor(BaseInstrumentor):
                 - tracer_provider: TracerProvider instance
                 - meter_provider: MeterProvider instance
                 - logger_provider: LoggerProvider instance
+                - completion_hook: CompletionHook instance
         """
-
-        # Get providers from kwargs
-        tracer_provider = kwargs.get("tracer_provider")
-        logger_provider = kwargs.get("logger_provider")
-        meter_provider = kwargs.get("meter_provider")
-
-        # Initialize tracer
-        tracer = get_tracer(
-            __name__,
-            "",
-            tracer_provider,
-            schema_url=Schemas.V1_28_0.value,
+        handler = TelemetryHandler(
+            tracer_provider=kwargs.get("tracer_provider"),
+            meter_provider=kwargs.get("meter_provider"),
+            logger_provider=kwargs.get("logger_provider"),
+            completion_hook=kwargs.get("completion_hook"),
         )
 
-        # Initialize logger for events
-        logger = get_logger(
-            __name__,
-            "",
-            schema_url=Schemas.V1_28_0.value,
-            logger_provider=logger_provider,
+        wrap_function_wrapper(
+            "claude_agent_sdk.query",
+            "query",
+            query_wrapper(handler),
         )
-
-        # Initialize meter for metrics
-        meter = get_meter(
-            __name__,
-            "",
-            meter_provider,
-            schema_url=Schemas.V1_28_0.value,
+        wrap_function_wrapper(
+            "claude_agent_sdk.client",
+            "ClaudeSDKClient.connect",
+            client_connect_wrapper(handler),
         )
-
-        # Store for later use in _uninstrument
-        self._tracer = tracer
-        self._logger = logger
-        self._meter = meter
-
-        # Patching will be added in a follow-up PR
+        wrap_function_wrapper(
+            "claude_agent_sdk.client",
+            "ClaudeSDKClient.query",
+            client_query_wrapper(handler),
+        )
+        wrap_function_wrapper(
+            "claude_agent_sdk.client",
+            "ClaudeSDKClient.receive_response",
+            client_receive_response_wrapper(handler),
+        )
+        self._sync_package_query_export()
 
     def _uninstrument(self, **kwargs: Any) -> None:
-        """Disable Claude Agent SDK instrumentation.
+        """Disable Claude Agent SDK instrumentation."""
+        query_module = importlib.import_module("claude_agent_sdk.query")
+        unwrap(query_module, "query")
+        client_module = importlib.import_module("claude_agent_sdk.client")
+        client_class = client_module.ClaudeSDKClient
+        unwrap(client_class, "connect")
+        unwrap(client_class, "query")
+        unwrap(client_class, "receive_response")
+        self._sync_package_query_export()
 
-        This removes all patches applied during instrumentation.
+    @staticmethod
+    def _sync_package_query_export() -> None:
+        """Point the package-level ``query`` re-export at the module attribute.
+
+        The ``claude_agent_sdk`` package re-exports ``query`` from its
+        ``claude_agent_sdk.query`` submodule at import time, so patching the
+        submodule attribute alone would leave
+        ``from claude_agent_sdk import query`` resolving to the unpatched
+        function (and vice versa on uninstrument).
         """
-        # Unpatching will be added in a follow-up PR
+        package = importlib.import_module("claude_agent_sdk")
+        query_module = importlib.import_module("claude_agent_sdk.query")
+        setattr(package, "query", query_module.query)
