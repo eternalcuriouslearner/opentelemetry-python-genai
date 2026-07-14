@@ -10,9 +10,9 @@ Instrumentation for the `Claude Agent SDK
 
 The Claude Agent SDK runs an agent loop through the bundled Claude Code
 CLI, so telemetry is emitted at the agent level: ``query()`` and each
-``ClaudeSDKClient.receive_response()`` turn produce ``invoke_agent`` spans,
-tool executions produce ``execute_tool`` spans, and subagent runs produce
-nested ``invoke_agent`` spans.
+``ClaudeSDKClient.receive_response()`` turn produce ``invoke_agent`` spans
+carrying the prompt, assistant output messages, token usage, model, and
+session id.
 
 Usage
 -----
@@ -72,8 +72,8 @@ class ClaudeAgentSDKInstrumentor(BaseInstrumentor):
     """An instrumentor for the Claude Agent SDK.
 
     This instrumentor traces agent runs (``query()`` and
-    ``ClaudeSDKClient`` response turns), tool executions, and subagent runs,
-    and optionally captures message content.
+    ``ClaudeSDKClient`` response turns) as ``invoke_agent`` spans and
+    optionally captures message content.
     """
 
     # pylint: disable=no-self-use

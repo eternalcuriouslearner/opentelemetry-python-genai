@@ -1,49 +1,30 @@
 # Copyright The OpenTelemetry Authors
 # SPDX-License-Identifier: Apache-2.0
 
-"""Wrappers turning Claude Agent SDK runs into GenAI telemetry.
+"""Wrappers turning Claude Agent SDK runs into ``invoke_agent`` telemetry.
 
 The Claude Agent SDK drives an agent loop through the bundled Claude Code
 CLI, so there is no per-API-call surface to patch. Telemetry is emitted at
-the agent level via ``opentelemetry-util-genai``:
+the agent level via ``opentelemetry-util-genai``: ``query()`` and each
+``ClaudeSDKClient.receive_response()`` turn become ``invoke_agent`` spans
+carrying the prompt, the assistant output messages, token usage, model,
+and session id extracted from the streamed messages.
 
-- ``query()`` and each ``ClaudeSDKClient.receive_response()`` turn become
-  ``invoke_agent`` spans,
-- tool executions become ``execute_tool`` spans,
-- subagent runs (messages carrying ``parent_tool_use_id``) become nested
-  ``invoke_agent`` spans.
-
-Tool executions during ``query()`` are observed through injected
-``PreToolUse`` / ``PostToolUse`` / ``PostToolUseFailure`` hooks, which see
-the actual execution window. util-genai parents spans through OTel context,
-and the SDK dispatches hook callbacks on tasks that snapshot the context of
-its message-reader task: for ``query()`` that snapshot includes the agent
-span, so hook-started tool spans nest correctly. ``ClaudeSDKClient`` starts
-its reader task at ``connect()`` — before any per-turn span exists — so
-hook-started spans could not nest under the turn; the client flow instead
-tracks tools from the ``tool_use`` / ``tool_result`` message blocks, as do
-subagent tools (whose spans must nest under the subagent span living in the
-message-consumer task). Each tool invocation is finished only by the path
-that started it, keeping context attach/detach pairs task-balanced.
+Messages that belong to a subagent run (``parent_tool_use_id`` set) are not
+folded into the root span; dedicated subagent ``invoke_agent`` and
+``execute_tool`` spans are a follow-up.
 """
 
 from __future__ import annotations
 
-import copy
 from collections.abc import Mapping as MappingABC
 from typing import Any, AsyncIterator, Awaitable, Callable, Mapping
-
-from claude_agent_sdk.types import ClaudeAgentOptions, HookMatcher
 
 from opentelemetry.semconv._incubating.attributes import (
     gen_ai_attributes as GenAIAttributes,
 )
 from opentelemetry.util.genai.handler import TelemetryHandler
-from opentelemetry.util.genai.invocation import (
-    AgentInvocation,
-    Error,
-    ToolInvocation,
-)
+from opentelemetry.util.genai.invocation import AgentInvocation, Error
 from opentelemetry.util.genai.types import (
     GenericPart,
     InputMessage,
@@ -60,11 +41,6 @@ _PROVIDER = GenAIAttributes.GenAiProviderNameValues.ANTHROPIC.value
 # connect()/query() with the span of the next receive_response() turn.
 _LAST_PROMPT_ATTR = "_otel_genai_last_prompt"
 
-# Owners for in-flight tool invocations; a tool invocation is only finished
-# by the path that started it so context tokens stay task-balanced.
-_HOOK_OWNER = "hook"
-_MESSAGE_OWNER = "message"
-
 # semconv error.type fallback value for failures that carry no exception.
 _OTHER_ERROR = "_OTHER"
 
@@ -74,10 +50,10 @@ _error_types: dict[str, type[Exception]] = {}
 def _error_type(name: str) -> type[Exception]:
     """Return an exception type whose qualname is the given error code.
 
-    util-genai's ``Error`` only accepts an exception type, but result and
-    tool failures reported by the CLI are plain messages with a
-    domain-specific error code (e.g. ``error_max_turns``). Synthesizing a
-    type per code (bounded set) surfaces that code as ``error.type``.
+    util-genai's ``Error`` only accepts an exception type, but result
+    failures reported by the CLI are plain messages with a domain-specific
+    error code (e.g. ``error_max_turns``). Synthesizing a type per code
+    (bounded set) surfaces that code as ``error.type``.
     """
     etype = _error_types.get(name)
     if etype is None:
@@ -342,86 +318,6 @@ def _output_message_from_assistant(msg: Any) -> OutputMessage | None:
     )
 
 
-class _ToolTracker:
-    """Tracks in-flight ``execute_tool`` invocations keyed by tool_use_id.
-
-    Each invocation is owned by the path that started it (hook or message
-    blocks); only the owning path finishes it, so a start/finish pair never
-    crosses asyncio tasks with unbalanced context tokens.
-    """
-
-    def __init__(
-        self, handler: TelemetryHandler, capture_content: bool
-    ) -> None:
-        self._handler = handler
-        self._capture_content = capture_content
-        self._in_flight: dict[str, ToolInvocation] = {}
-        self._owners: dict[str, str] = {}
-        self._names: dict[str, str] = {}
-
-    def start(
-        self, tool_name: Any, tool_input: Any, tool_use_id: Any, owner: str
-    ) -> None:
-        if not tool_use_id or not tool_name:
-            return
-        key = str(tool_use_id)
-        if key in self._in_flight:
-            return
-        invocation = self._handler.tool(str(tool_name), tool_call_id=key)
-        # ToolInvocation metric attributes don't include the provider by
-        # default; set it so gen_ai.client.operation.duration carries
-        # gen_ai.provider.name.
-        invocation.metric_attributes[GenAIAttributes.GEN_AI_PROVIDER_NAME] = (
-            _PROVIDER
-        )
-        if self._capture_content and tool_input is not None:
-            invocation.arguments = tool_input
-        self._in_flight[key] = invocation
-        self._owners[key] = owner
-        self._names[key] = str(tool_name)
-
-    def get_name(self, tool_use_id: Any) -> str | None:
-        if tool_use_id is None:
-            return None
-        return self._names.get(str(tool_use_id))
-
-    def _pop(self, tool_use_id: Any, owner: str) -> ToolInvocation | None:
-        if tool_use_id is None:
-            return None
-        key = str(tool_use_id)
-        if self._owners.get(key) != owner:
-            return None
-        self._owners.pop(key, None)
-        return self._in_flight.pop(key, None)
-
-    def finish(self, tool_use_id: Any, tool_response: Any, owner: str) -> None:
-        invocation = self._pop(tool_use_id, owner)
-        if invocation is None:
-            return
-        if self._capture_content and tool_response is not None:
-            invocation.tool_result = tool_response
-        invocation.stop()
-
-    def fail(self, tool_use_id: Any, error: Any, owner: str) -> None:
-        invocation = self._pop(tool_use_id, owner)
-        if invocation is None:
-            return
-        message = str(error) if error is not None else "Tool execution error"
-        invocation.fail(Error(message=message, type=_error_type(_OTHER_ERROR)))
-
-    def finish_abandoned(self) -> None:
-        for key in reversed(list(self._in_flight)):
-            invocation = self._in_flight.pop(key)
-            self._owners.pop(key, None)
-            invocation.fail(
-                Error(
-                    message="tool invocation was not completed",
-                    type=_error_type(_OTHER_ERROR),
-                )
-            )
-        self._names.clear()
-
-
 class _AgentRunState:
     """Accumulates message-derived state for one ``invoke_agent`` span."""
 
@@ -437,6 +333,12 @@ class _AgentRunState:
         self._finished = False
 
     def process_message(self, msg: Any) -> None:
+        # Messages that belong to a subagent run must not be folded into
+        # the root span.
+        parent_tool_use_id = _get_field(msg, "parent_tool_use_id")
+        if parent_tool_use_id is not None and str(parent_tool_use_id):
+            return
+
         invocation = self.invocation
         model = _extract_model_name(msg)
         if model and invocation.request_model is None:
@@ -525,235 +427,14 @@ class _AgentRunState:
             invocation.stop()
 
 
-class _AgentRunObserver:
-    """Per-run tool, subagent, and root-span bookkeeping.
-
-    ``on_message`` is called for every streamed message from the task that
-    consumes the run's async generator; hook callbacks feed the tool tracker
-    from the SDK's hook-dispatch tasks.
-    """
-
-    def __init__(
-        self,
-        handler: TelemetryHandler,
-        capture_content: bool,
-        invocation: AgentInvocation,
-    ) -> None:
-        self._handler = handler
-        self._capture_content = capture_content
-        self.tool_tracker = _ToolTracker(handler, capture_content)
-        self._root = _AgentRunState(invocation, capture_content)
-        self._subagents: dict[str, _AgentRunState] = {}
-
-    def _track_tool_blocks(self, msg: Any) -> None:
-        content = _extract_message_content(msg)
-        if content is None:
-            return
-        for block in content:
-            if _is_tool_use_block(block):
-                self.tool_tracker.start(
-                    _get_field(block, "name"),
-                    _get_field(block, "input"),
-                    _get_field(block, "id"),
-                    _MESSAGE_OWNER,
-                )
-            elif _is_tool_result_block(block):
-                tool_use_id = _get_field(block, "tool_use_id")
-                if _get_field(block, "is_error"):
-                    self.tool_tracker.fail(
-                        tool_use_id, "Tool execution error", _MESSAGE_OWNER
-                    )
-                else:
-                    self.tool_tracker.finish(
-                        tool_use_id,
-                        _get_field(block, "content"),
-                        _MESSAGE_OWNER,
-                    )
-
-    def _subagent_state(self, parent_tool_use_id: str) -> _AgentRunState:
-        state = self._subagents.get(parent_tool_use_id)
-        if state is None:
-            invocation = self._handler.invoke_local_agent(
-                agent_name=self.tool_tracker.get_name(parent_tool_use_id),
-            )
-            invocation.provider = _PROVIDER
-            state = _AgentRunState(invocation, self._capture_content)
-            self._subagents[parent_tool_use_id] = state
-        return state
-
-    def on_message(self, msg: Any) -> None:
-        parent_tool_use_id = _get_field(msg, "parent_tool_use_id")
-        if parent_tool_use_id is not None and str(parent_tool_use_id):
-            state = self._subagent_state(str(parent_tool_use_id))
-            state.process_message(msg)
-            # Subagent tool spans must nest under the subagent span living
-            # in this task's context, so they are always message-tracked.
-            self._track_tool_blocks(msg)
-            if _is_result_success_message(msg) or _is_result_error_message(
-                msg
-            ):
-                self._subagents.pop(str(parent_tool_use_id), None)
-                state.finish()
-            return
-        self._root.process_message(msg)
-        # Message blocks are tracked even when hooks are injected: the
-        # per-tool ownership in _ToolTracker lets whichever path observes a
-        # tool first drive its whole lifecycle, and hooks may never fire
-        # (e.g. replayed transports or older CLI versions).
-        self._track_tool_blocks(msg)
-
-    def finish(self, error: BaseException | None = None) -> None:
-        self.tool_tracker.finish_abandoned()
-        for key in reversed(list(self._subagents)):
-            self._subagents.pop(key).finish()
-        self._root.finish(error)
-
-
-def _hook_event_name(payload: Any) -> str | None:
-    value = _get_field(payload, "hook_event_name")
-    if value is None:
-        return None
-    return str(value)
-
-
-def _create_tool_hook_matchers(
-    tool_tracker: _ToolTracker,
-) -> dict[str, list[Any]]:
-    """Build PreToolUse/PostToolUse(/Failure) matchers feeding the tracker.
-
-    Tools that belong to a subagent (``parent_tool_use_id`` set) are skipped
-    here — the message path owns them so their spans nest under the subagent
-    span.
-    """
-
-    async def pre_tool_use(
-        input_data: Any,
-        tool_use_id: Any | None = None,
-        context: Any | None = None,
-    ) -> dict[str, Any]:
-        del context
-        try:
-            if (name := _hook_event_name(input_data)) and name != "PreToolUse":
-                return {}
-            if _get_field(input_data, "parent_tool_use_id"):
-                return {}
-            tool_tracker.start(
-                _get_field(input_data, "tool_name"),
-                _get_field(input_data, "tool_input"),
-                tool_use_id or _get_field(input_data, "tool_use_id"),
-                _HOOK_OWNER,
-            )
-        except Exception:  # pylint: disable=broad-except
-            pass
-        return {}
-
-    async def post_tool_use(
-        input_data: Any,
-        tool_use_id: Any | None = None,
-        context: Any | None = None,
-    ) -> dict[str, Any]:
-        del context
-        try:
-            if (
-                name := _hook_event_name(input_data)
-            ) and name != "PostToolUse":
-                return {}
-            tool_tracker.finish(
-                tool_use_id or _get_field(input_data, "tool_use_id"),
-                _get_field(input_data, "tool_response"),
-                _HOOK_OWNER,
-            )
-        except Exception:  # pylint: disable=broad-except
-            pass
-        return {}
-
-    async def post_tool_use_failure(
-        input_data: Any,
-        tool_use_id: Any | None = None,
-        context: Any | None = None,
-    ) -> dict[str, Any]:
-        del context
-        try:
-            if (
-                name := _hook_event_name(input_data)
-            ) and name != "PostToolUseFailure":
-                return {}
-            tool_tracker.fail(
-                tool_use_id or _get_field(input_data, "tool_use_id"),
-                _get_field(input_data, "error"),
-                _HOOK_OWNER,
-            )
-        except Exception:  # pylint: disable=broad-except
-            pass
-        return {}
-
-    return {
-        "PreToolUse": [HookMatcher(hooks=[pre_tool_use])],
-        "PostToolUse": [HookMatcher(hooks=[post_tool_use])],
-        "PostToolUseFailure": [HookMatcher(hooks=[post_tool_use_failure])],
-    }
-
-
-def _get_hooks(options: Any) -> Mapping[str, Any] | None:
-    if options is None:
-        return None
-    if isinstance(options, MappingABC):
-        hooks = options.get("hooks")
-    else:
-        hooks = getattr(options, "hooks", None)
-    return hooks if isinstance(hooks, MappingABC) else None
-
-
-def _set_hooks(options: Any, hooks: Mapping[str, Any]) -> Any:
-    if isinstance(options, MappingABC):
-        return {**options, "hooks": dict(hooks)}
-    try:
-        new_options = copy.copy(options)
-        setattr(new_options, "hooks", dict(hooks))
-        return new_options
-    except Exception:  # pylint: disable=broad-except
-        return None
-
-
-def _merge_hooks(options: Any, tool_tracker: _ToolTracker) -> Any | None:
-    """Return a copy of options with our tool hooks appended, or None."""
-    if options is None:
-        options = ClaudeAgentOptions()
-    existing_hooks = _get_hooks(options) or {}
-    merged_hooks: dict[str, Any] = dict(existing_hooks)
-    for event, matchers in _create_tool_hook_matchers(tool_tracker).items():
-        current = merged_hooks.get(event, [])
-        if not isinstance(current, list):
-            current = [current]
-        merged_hooks[event] = [*current, *matchers]
-    return _set_hooks(options, merged_hooks)
-
-
-def _extract_prompt_and_options(
+def _extract_prompt(
     args: tuple[Any, ...],
     kwargs: Mapping[str, Any],
-) -> tuple[Any, Any]:
+) -> Any:
     prompt = kwargs.get("prompt") if kwargs else None
-    options = kwargs.get("options") if kwargs else None
     if prompt is None and args:
         prompt = args[0]
-    if options is None and len(args) > 1:
-        options = args[1]
-    return prompt, options
-
-
-def _apply_options(
-    args: tuple[Any, ...],
-    kwargs: Mapping[str, Any],
-    options: Any,
-) -> tuple[tuple[Any, ...], dict[str, Any]]:
-    new_kwargs = dict(kwargs)
-    if "options" in new_kwargs or len(args) < 2:
-        new_kwargs["options"] = options
-        return args, new_kwargs
-    new_args = list(args)
-    new_args[1] = options
-    return tuple(new_args), new_kwargs
+    return prompt
 
 
 def _prompt_input_messages(prompt: Any) -> list[InputMessage]:
@@ -787,22 +468,19 @@ def query_wrapper(
         kwargs: dict[str, Any],
     ) -> AsyncIterator[Any]:
         del instance
-        prompt, options = _extract_prompt_and_options(args, kwargs)
+        prompt = _extract_prompt(args, kwargs)
         invocation = _start_agent_invocation(handler, capture_content, prompt)
-        observer = _AgentRunObserver(handler, capture_content, invocation)
-        merged_options = _merge_hooks(options, observer.tool_tracker)
-        if merged_options is not None:
-            args, kwargs = _apply_options(args, kwargs, merged_options)
+        state = _AgentRunState(invocation, capture_content)
         error: BaseException | None = None
         try:
             async for message in wrapped(*args, **kwargs):
-                observer.on_message(message)
+                state.process_message(message)
                 yield message
         except Exception as exc:
             error = exc
             raise
         finally:
-            observer.finish(error)
+            state.finish(error)
 
     return traced_query
 
@@ -819,9 +497,7 @@ def client_connect_wrapper(
         args: tuple[Any, ...],
         kwargs: dict[str, Any],
     ) -> Any:
-        prompt = kwargs.get("prompt") if kwargs else None
-        if prompt is None and args:
-            prompt = args[0]
+        prompt = _extract_prompt(args, kwargs)
         if prompt is not None:
             setattr(instance, _LAST_PROMPT_ATTR, prompt)
         return await wrapped(*args, **kwargs)
@@ -841,10 +517,7 @@ def client_query_wrapper(
         args: tuple[Any, ...],
         kwargs: dict[str, Any],
     ) -> Any:
-        prompt = kwargs.get("prompt") if kwargs else None
-        if prompt is None and args:
-            prompt = args[0]
-        setattr(instance, _LAST_PROMPT_ATTR, prompt)
+        setattr(instance, _LAST_PROMPT_ATTR, _extract_prompt(args, kwargs))
         return await wrapped(*args, **kwargs)
 
     return traced_client_query
@@ -853,14 +526,7 @@ def client_query_wrapper(
 def client_receive_response_wrapper(
     handler: TelemetryHandler,
 ) -> Callable[..., AsyncIterator[Any]]:
-    """Wrap each ``receive_response()`` turn in an ``invoke_agent`` span.
-
-    Tool executions are tracked from the streamed ``tool_use`` /
-    ``tool_result`` blocks rather than hooks: the client's reader task is
-    started at ``connect()``, before this turn's span exists, so
-    hook-dispatched callbacks would run in a context that cannot parent
-    tool spans under the turn.
-    """
+    """Wrap each ``receive_response()`` turn in an ``invoke_agent`` span."""
     capture_content = handler.should_capture_content()
 
     async def traced_receive_response(
@@ -871,16 +537,16 @@ def client_receive_response_wrapper(
     ) -> AsyncIterator[Any]:
         prompt = getattr(instance, _LAST_PROMPT_ATTR, None)
         invocation = _start_agent_invocation(handler, capture_content, prompt)
-        observer = _AgentRunObserver(handler, capture_content, invocation)
+        state = _AgentRunState(invocation, capture_content)
         error: BaseException | None = None
         try:
             async for message in wrapped(*args, **kwargs):
-                observer.on_message(message)
+                state.process_message(message)
                 yield message
         except Exception as exc:
             error = exc
             raise
         finally:
-            observer.finish(error)
+            state.finish(error)
 
     return traced_receive_response
