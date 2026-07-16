@@ -18,7 +18,15 @@ folded into the root span; dedicated subagent ``invoke_agent`` and
 from __future__ import annotations
 
 from collections.abc import Mapping as MappingABC
-from typing import Any, AsyncIterator, Awaitable, Callable, Mapping
+from typing import (
+    Any,
+    AsyncIterator,
+    Awaitable,
+    Callable,
+    Mapping,
+    Sequence,
+    cast,
+)
 
 from opentelemetry.semconv._incubating.attributes import (
     gen_ai_attributes as GenAIAttributes,
@@ -64,7 +72,7 @@ def _error_type(name: str) -> type[Exception]:
 
 def _get_field(obj: Any, key: str, default: Any = None) -> Any:
     if isinstance(obj, MappingABC):
-        return obj.get(key, default)
+        return cast(Mapping[str, Any], obj).get(key, default)
     return getattr(obj, key, default)
 
 
@@ -79,7 +87,7 @@ def _safe_int(value: Any) -> int | None:
 
 def _coerce_usage(usage: Any) -> Mapping[str, Any]:
     if isinstance(usage, MappingABC):
-        return usage
+        return cast(Mapping[str, Any], usage)
     return {
         "input_tokens": getattr(usage, "input_tokens", None),
         "output_tokens": getattr(usage, "output_tokens", None),
@@ -97,15 +105,19 @@ def _coerce_usage(usage: Any) -> Mapping[str, Any]:
 
 def _extract_model_name_from_usage(model_usage: Any) -> str | None:
     if isinstance(model_usage, MappingABC) and model_usage:
+        per_model = cast(Mapping[Any, Any], model_usage)
+
         # The CLI emits per-model usage as `{model_name: {outputTokens, ...}}`.
         # Multi-model runs (main model + a router / fast model) must surface
         # the model that did the bulk of the generation, not whichever key
         # dict iteration happens to yield first.
         def _output_tokens(name: Any) -> int:
-            entry = model_usage[name]
+            entry = per_model[name]
             if isinstance(entry, MappingABC):
                 value = (
-                    entry.get("outputTokens") or entry.get("output_tokens") or 0
+                    _get_field(entry, "outputTokens")
+                    or _get_field(entry, "output_tokens")
+                    or 0
                 )
                 try:
                     return int(value)
@@ -113,11 +125,11 @@ def _extract_model_name_from_usage(model_usage: Any) -> str | None:
                     return 0
             return 0
 
-        best = max(model_usage.keys(), key=_output_tokens, default=None)
+        best = max(per_model.keys(), key=_output_tokens, default=None)
         if best is not None:
             return str(best)
     if isinstance(model_usage, (list, tuple)):
-        for entry in model_usage:
+        for entry in cast(Sequence[Any], model_usage):
             name = (
                 _get_field(entry, "model")
                 or _get_field(entry, "name")
@@ -228,12 +240,14 @@ def _normalize_finish_reason(stop_reason: Any) -> str | None:
 
 
 def _extract_message_content(message: Any) -> list[Any] | None:
-    content = getattr(message, "content", None)
+    content: Any = getattr(message, "content", None)
     if isinstance(content, list):
-        return content
+        return cast("list[Any]", content)
     inner = _get_field(message, "message")
     content = _get_field(inner, "content")
-    return content if isinstance(content, list) else None
+    if isinstance(content, list):
+        return cast("list[Any]", content)
+    return None
 
 
 def _is_tool_use_block(block: Any) -> bool:
