@@ -54,14 +54,15 @@ API
 
 from typing import Any, Collection
 
-from opentelemetry._logs import get_logger
 from opentelemetry.instrumentation.genai.claude_agent_sdk.package import (
     _instruments,
 )
+from opentelemetry.instrumentation.genai.claude_agent_sdk.patch import (
+    patch,
+    unpatch,
+)
 from opentelemetry.instrumentation.instrumentor import BaseInstrumentor
-from opentelemetry.metrics import get_meter
-from opentelemetry.semconv.schemas import Schemas
-from opentelemetry.trace import get_tracer
+from opentelemetry.util.genai.handler import TelemetryHandler
 
 
 class ClaudeAgentSDKInstrumentor(BaseInstrumentor):
@@ -96,40 +97,17 @@ class ClaudeAgentSDKInstrumentor(BaseInstrumentor):
         logger_provider = kwargs.get("logger_provider")
         meter_provider = kwargs.get("meter_provider")
 
-        # Initialize tracer
-        tracer = get_tracer(
-            __name__,
-            "",
-            tracer_provider,
-            schema_url=Schemas.V1_28_0.value,
-        )
-
-        # Initialize logger for events
-        logger = get_logger(
-            __name__,
-            "",
-            schema_url=Schemas.V1_28_0.value,
+        telemetry_handler = TelemetryHandler(
+            tracer_provider=tracer_provider,
             logger_provider=logger_provider,
+            meter_provider=meter_provider,
         )
 
-        # Initialize meter for metrics
-        meter = get_meter(
-            __name__,
-            "",
-            meter_provider,
-            schema_url=Schemas.V1_28_0.value,
-        )
-
-        # Store for later use in _uninstrument
-        self._tracer = tracer
-        self._logger = logger
-        self._meter = meter
-
-        # Patching will be added in a follow-up PR
+        patch(telemetry_handler)
 
     def _uninstrument(self, **kwargs: Any) -> None:
         """Disable Claude Agent SDK instrumentation.
 
         This removes all patches applied during instrumentation.
         """
-        # Unpatching will be added in a follow-up PR
+        unpatch()
