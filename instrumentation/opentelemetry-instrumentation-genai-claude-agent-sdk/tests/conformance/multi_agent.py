@@ -1,18 +1,17 @@
 # Copyright The OpenTelemetry Authors
 # SPDX-License-Identifier: Apache-2.0
 
-"""Conformance scenario: a ``query()`` run where the agent uses a tool.
+"""Conformance scenario: a ``query()`` run that delegates to a subagent.
 
-The recorded run has the model call the Bash tool before answering, so the
-run emits an ``execute_tool`` span nested under the ``invoke_agent`` span,
-and the agent span's output messages carry a ``tool_call`` part alongside
-the final text.
+The recorded run has the root agent invoke the Agent tool to spawn a
+``general-purpose`` subagent, which runs the Bash tool. Emits nested
+``invoke_agent`` spans (root and subagent) plus ``execute_tool`` spans for
+the spawning Agent tool and the subagent's Bash tool.
 """
 
 from __future__ import annotations
 
 import asyncio
-import json
 from typing import Any
 
 from claude_agent_sdk import ClaudeAgentOptions
@@ -30,12 +29,13 @@ from opentelemetry.test_util_genai.instrumentor import instrument
 from .cli_replay import replay_transport
 
 PROMPT = (
-    "Use the Bash tool to run: wc -c 'pyproject.toml' and respond with "
-    "exactly the output. Do not answer unless you executed the tool."
+    "You must use the Agent tool to delegate to a subagent. The subagent "
+    "must use the Bash tool to run: wc -c 'pyproject.toml' and respond "
+    "with exactly the output. Do not answer unless you executed the tool."
 )
 
 
-class ToolCallingScenario(Scenario):
+class MultiAgentScenario(Scenario):
     expected_spans = ("invoke_agent", "execute_tool")
     expected_metrics = (
         "gen_ai.client.operation.duration",
@@ -58,12 +58,13 @@ class ToolCallingScenario(Scenario):
             from claude_agent_sdk import query  # noqa: PLC0415
 
             options = ClaudeAgentOptions(
-                allowed_tools=["Bash"], permission_mode="bypassPermissions"
+                allowed_tools=["Bash", "Agent"],
+                permission_mode="bypassPermissions",
             )
             async for _ in query(
                 prompt=PROMPT,
                 options=options,
-                transport=replay_transport("tool_calling.yaml"),
+                transport=replay_transport("subagent.yaml"),
             ):
                 pass
 
@@ -78,50 +79,30 @@ class ToolCallingScenario(Scenario):
 
     def validate(self, report: LiveCheckReport) -> None:
         super().validate(report)
-        spans = _invoke_agent_spans(report)
-        assert len(spans) == 1, f"expected one invoke_agent span, saw {spans}"
-        span = spans[0]
-
-        output_messages = json.loads(_attr(span, "gen_ai.output.messages"))
-        part_types = {
-            part["type"]
-            for message in output_messages
-            for part in message["parts"]
-        }
-        assert "tool_call" in part_types, (
-            f"expected a tool_call part on an output message, saw {part_types}"
-        )
-        assert "text" in part_types, part_types
-
-        tool_calls = [
-            part
-            for message in output_messages
-            for part in message["parts"]
-            if part["type"] == "tool_call"
-        ]
-        assert tool_calls[0]["name"] == "Bash", tool_calls
-        assert isinstance(tool_calls[0]["id"], str)
-        assert "wc -c" in tool_calls[0]["arguments"]["command"], tool_calls
-
-        tool_spans = [
+        agent_spans = [
             entry["span"]
             for entry in report["samples"]
             if "span" in entry
-            and _attr(entry["span"], "gen_ai.operation.name") == "execute_tool"
+            and _attr(entry["span"], "gen_ai.operation.name")
+            == "invoke_agent"
         ]
-        assert len(tool_spans) == 1, tool_spans
-        assert _attr(tool_spans[0], "gen_ai.tool.name") == "Bash"
-        assert _attr(tool_spans[0], "gen_ai.tool.type") == "extension"
-        assert isinstance(_attr(tool_spans[0], "gen_ai.tool.call.id"), str)
+        assert len(agent_spans) == 2, (
+            f"expected a root and a subagent invoke_agent span, saw "
+            f"{len(agent_spans)}"
+        )
+        agent_names = {
+            _attr(span, "gen_ai.agent.name") for span in agent_spans
+        }
+        assert "general-purpose" in agent_names, agent_names
 
-
-def _invoke_agent_spans(report: LiveCheckReport) -> list[dict[str, Any]]:
-    return [
-        entry["span"]
-        for entry in report["samples"]
-        if "span" in entry
-        and _attr(entry["span"], "gen_ai.operation.name") == "invoke_agent"
-    ]
+        tool_names = {
+            _attr(entry["span"], "gen_ai.tool.name")
+            for entry in report["samples"]
+            if "span" in entry
+            and _attr(entry["span"], "gen_ai.operation.name")
+            == "execute_tool"
+        }
+        assert tool_names == {"Agent", "Bash"}, tool_names
 
 
 def _attr(span: dict[str, Any], name: str) -> Any:

@@ -1,0 +1,1 @@
+Implement Claude Agent SDK instrumentation: `invoke_agent` spans for `query()` and `ClaudeSDKClient` response turns, with nested `execute_tool` and subagent `invoke_agent` spans, token usage, and optional message-content capture

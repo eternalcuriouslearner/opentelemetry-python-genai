@@ -104,6 +104,4 @@ def _attr(span: dict[str, Any], name: str) -> Any:
 
 def _part_types(messages_json: str | None) -> list[str]:
     messages = json.loads(messages_json) if messages_json else []
-    return [
-        part["type"] for message in messages for part in message["parts"]
-    ]
+    return [part["type"] for message in messages for part in message["parts"]]

@@ -19,6 +19,7 @@ from opentelemetry.test_util_genai.conformance import (  # noqa: E402
 )
 
 from .conformance.invoke_agent import InvokeAgentScenario
+from .conformance.multi_agent import MultiAgentScenario
 from .conformance.reasoning import ReasoningScenario
 from .conformance.tool_calling import ToolCallingScenario
 
@@ -29,6 +30,7 @@ from .conformance.tool_calling import ToolCallingScenario
         pytest.param(InvokeAgentScenario()),
         pytest.param(ToolCallingScenario()),
         pytest.param(ReasoningScenario()),
+        pytest.param(MultiAgentScenario()),
     ],
     ids=lambda s: type(s).__name__,
 )

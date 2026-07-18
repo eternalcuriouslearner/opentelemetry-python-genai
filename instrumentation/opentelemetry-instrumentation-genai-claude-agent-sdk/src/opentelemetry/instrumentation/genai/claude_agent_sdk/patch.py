@@ -1,18 +1,36 @@
 # Copyright The OpenTelemetry Authors
 # SPDX-License-Identifier: Apache-2.0
 
-"""Wrappers turning Claude Agent SDK runs into ``invoke_agent`` telemetry.
+"""Wrappers turning Claude Agent SDK runs into GenAI telemetry.
 
 The Claude Agent SDK drives an agent loop through the bundled Claude Code
-CLI, so there is no per-API-call surface to patch. Telemetry is emitted at
-the agent level via ``opentelemetry-util-genai``: ``query()`` and each
-``ClaudeSDKClient.receive_response()`` turn become ``invoke_agent`` spans
-carrying the prompt, the assistant output messages, token usage, model,
-and session id extracted from the streamed messages.
+CLI, so there is no per-API-call surface to patch. Telemetry is derived
+from the streamed messages, entirely in the task that consumes them:
 
-Messages that belong to a subagent run (``parent_tool_use_id`` set) are not
-folded into the root span; dedicated subagent ``invoke_agent`` and
-``execute_tool`` spans are a follow-up.
+- ``query()`` and each ``ClaudeSDKClient.receive_response()`` turn become
+  ``invoke_agent`` spans carrying the prompt, assistant output messages,
+  token usage, model, and session id;
+- ``tool_use`` / ``tool_result`` content blocks become ``execute_tool``
+  spans;
+- subagent runs (messages carrying ``parent_tool_use_id``) become nested
+  ``invoke_agent`` spans under the spawning tool's span.
+
+Span parenting relies on util-genai's context management: every invocation
+becomes the active OTel context when created and is popped when finished,
+so creating each span while its parent is the innermost active invocation
+— in stream order, in one task — reproduces the run's hierarchy. The
+stream is well-nested for sequential runs; when the model issues parallel
+tool calls in a single turn (or parallel subagents interleave), sibling
+spans can be mis-parented under each other. Attribute routing is keyed by
+``tool_use_id`` and stays correct regardless. Explicit parenting support
+in util-genai would lift this limitation.
+
+The Claude Code CLI additionally has built-in (beta) OpenTelemetry tracing
+of its own (``claude_code.*`` spans exported directly from the CLI
+process). The SDK injects W3C trace context into the CLI subprocess, so
+when that is enabled the CLI's spans join the same trace underneath the
+``invoke_agent`` span emitted here; this instrumentation neither requires
+nor conflicts with it.
 """
 
 from __future__ import annotations
@@ -32,7 +50,11 @@ from opentelemetry.semconv._incubating.attributes import (
     gen_ai_attributes as GenAIAttributes,
 )
 from opentelemetry.util.genai.handler import TelemetryHandler
-from opentelemetry.util.genai.invocation import AgentInvocation, Error
+from opentelemetry.util.genai.invocation import (
+    AgentInvocation,
+    Error,
+    ToolInvocation,
+)
 from opentelemetry.util.genai.types import (
     GenericPart,
     InputMessage,
@@ -58,10 +80,10 @@ _error_types: dict[str, type[Exception]] = {}
 def _error_type(name: str) -> type[Exception]:
     """Return an exception type whose qualname is the given error code.
 
-    util-genai's ``Error`` only accepts an exception type, but result
-    failures reported by the CLI are plain messages with a domain-specific
-    error code (e.g. ``error_max_turns``). Synthesizing a type per code
-    (bounded set) surfaces that code as ``error.type``.
+    util-genai's ``Error`` only accepts an exception type, but result and
+    tool failures reported by the CLI are plain messages with a
+    domain-specific error code (e.g. ``error_max_turns``). Synthesizing a
+    type per code (bounded set) surfaces that code as ``error.type``.
     """
     etype = _error_types.get(name)
     if etype is None:
@@ -187,6 +209,15 @@ def _extract_session_id(msg: Any) -> str | None:
     return str(session_id) if session_id else None
 
 
+def _extract_parent_tool_use_id(msg: Any) -> str | None:
+    """Subagent correlation id, also checked in SystemMessage payload data."""
+    parent = _get_field(msg, "parent_tool_use_id")
+    if parent is None:
+        parent = _get_field(_get_field(msg, "data", {}), "parent_tool_use_id")
+    value = str(parent) if parent is not None else ""
+    return value or None
+
+
 def _is_system_init_message(msg: Any) -> bool:
     if _get_field(msg, "subtype") != "init":
         return False
@@ -301,6 +332,37 @@ def _is_assistant_message(msg: Any) -> bool:
     )
 
 
+def _is_user_message(msg: Any) -> bool:
+    if _get_field(msg, "type") == "user":
+        return True
+    inner = _get_field(msg, "message")
+    if inner is not None and _get_field(inner, "role") == "user":
+        return True
+    # SDK UserMessage dataclasses carry content but no model.
+    return (
+        getattr(msg, "content", None) is not None
+        and _get_field(msg, "model") is None
+        and _get_field(msg, "subtype") is None
+    )
+
+
+def _user_message_text(msg: Any) -> str | None:
+    """Plain text of a user message, or None if it carries no text."""
+    content: Any = getattr(msg, "content", None)
+    if content is None:
+        content = _get_field(_get_field(msg, "message"), "content")
+    if isinstance(content, str):
+        return content
+    if not isinstance(content, list):
+        return None
+    texts = [
+        str(_get_field(block, "text", ""))
+        for block in cast("list[Any]", content)
+        if _is_text_block(block)
+    ]
+    return "\n".join(text for text in texts if text) or None
+
+
 def _output_message_from_assistant(msg: Any) -> OutputMessage | None:
     content = _extract_message_content(msg)
     if content is None:
@@ -332,6 +394,81 @@ def _output_message_from_assistant(msg: Any) -> OutputMessage | None:
     )
 
 
+class _ToolTracker:
+    """Tracks in-flight ``execute_tool`` invocations keyed by tool_use_id."""
+
+    def __init__(
+        self, handler: TelemetryHandler, capture_content: bool
+    ) -> None:
+        self._handler = handler
+        self._capture_content = capture_content
+        self._in_flight: dict[str, ToolInvocation] = {}
+        self._names: dict[str, str] = {}
+        self._inputs: dict[str, Any] = {}
+
+    def start(self, block: Any) -> None:
+        tool_use_id = _get_field(block, "id")
+        tool_name = _get_field(block, "name")
+        if not tool_use_id or not tool_name:
+            return
+        key = str(tool_use_id)
+        if key in self._in_flight:
+            return
+        invocation = self._handler.tool(str(tool_name), tool_call_id=key)
+        # The CLI executes tools on the agent side rather than as
+        # client-application functions.
+        invocation.tool_type = "extension"
+        # ToolInvocation metric attributes don't include the provider by
+        # default; set it so gen_ai.client.operation.duration carries
+        # gen_ai.provider.name.
+        invocation.metric_attributes[GenAIAttributes.GEN_AI_PROVIDER_NAME] = (
+            _PROVIDER
+        )
+        tool_input = _get_field(block, "input")
+        if self._capture_content and tool_input is not None:
+            invocation.arguments = tool_input
+        self._in_flight[key] = invocation
+        self._names[key] = str(tool_name)
+        self._inputs[key] = tool_input
+
+    def finish(self, block: Any) -> None:
+        tool_use_id = _get_field(block, "tool_use_id")
+        if tool_use_id is None:
+            return
+        invocation = self._in_flight.pop(str(tool_use_id), None)
+        if invocation is None:
+            return
+        if _get_field(block, "is_error"):
+            invocation.fail(
+                Error(
+                    message="Tool execution error",
+                    type=_error_type(_OTHER_ERROR),
+                )
+            )
+            return
+        if self._capture_content:
+            content = _get_field(block, "content")
+            if content is not None:
+                invocation.tool_result = content
+        invocation.stop()
+
+    def get_name(self, tool_use_id: str) -> str | None:
+        return self._names.get(tool_use_id)
+
+    def get_input(self, tool_use_id: str) -> Any:
+        return self._inputs.get(tool_use_id)
+
+    def finish_abandoned(self) -> None:
+        for key in reversed(list(self._in_flight)):
+            invocation = self._in_flight.pop(key)
+            invocation.fail(
+                Error(
+                    message="tool invocation was not completed",
+                    type=_error_type(_OTHER_ERROR),
+                )
+            )
+
+
 class _AgentRunState:
     """Accumulates message-derived state for one ``invoke_agent`` span."""
 
@@ -347,12 +484,6 @@ class _AgentRunState:
         self._finished = False
 
     def process_message(self, msg: Any) -> None:
-        # Messages that belong to a subagent run must not be folded into
-        # the root span.
-        parent_tool_use_id = _get_field(msg, "parent_tool_use_id")
-        if parent_tool_use_id is not None and str(parent_tool_use_id):
-            return
-
         invocation = self.invocation
         model = _extract_model_name(msg)
         if model and invocation.request_model is None:
@@ -395,6 +526,20 @@ class _AgentRunState:
                 output_message = _output_message_from_assistant(msg)
                 if output_message is not None:
                     self._output_messages.append(output_message)
+            return
+        if (
+            self._capture_content
+            and not self.invocation.input_messages
+            and _is_user_message(msg)
+        ):
+            # The first plain-text user message is the run's prompt (for
+            # subagents, the task the parent delegated); later user messages
+            # carry tool results.
+            text = _user_message_text(msg)
+            if text:
+                invocation.input_messages = [
+                    InputMessage(role="user", parts=[Text(content=text)])
+                ]
 
     def _apply_usage(self, msg: Any) -> None:
         invocation = self.invocation
@@ -441,6 +586,91 @@ class _AgentRunState:
             invocation.stop()
 
 
+class _AgentRunObserver:
+    """Per-run bookkeeping: root span, tool spans, and subagent spans.
+
+    ``on_message`` is called for every streamed message from the task that
+    consumes the run's async generator, so each invocation is created while
+    its parent is the innermost active context (see the module docstring).
+    """
+
+    def __init__(
+        self,
+        handler: TelemetryHandler,
+        capture_content: bool,
+        invocation: AgentInvocation,
+    ) -> None:
+        self._handler = handler
+        self._capture_content = capture_content
+        self._tools = _ToolTracker(handler, capture_content)
+        self._root = _AgentRunState(invocation, capture_content)
+        self._subagents: dict[str, _AgentRunState] = {}
+
+    def _subagent_state(self, parent_tool_use_id: str) -> _AgentRunState:
+        state = self._subagents.get(parent_tool_use_id)
+        if state is None:
+            # The spawning tool's input carries the subagent identity
+            # (e.g. Task/Agent tools have a `subagent_type`).
+            tool_input = self._tools.get_input(parent_tool_use_id)
+            subagent_type = _get_field(tool_input, "subagent_type")
+            agent_name = (
+                str(subagent_type)
+                if subagent_type
+                else self._tools.get_name(parent_tool_use_id)
+            )
+            invocation = self._handler.invoke_local_agent(
+                agent_name=agent_name
+            )
+            invocation.provider = _PROVIDER
+            state = _AgentRunState(invocation, self._capture_content)
+            self._subagents[parent_tool_use_id] = state
+        return state
+
+    def _finish_subagent(
+        self, parent_tool_use_id: str, error: BaseException | None = None
+    ) -> None:
+        state = self._subagents.pop(parent_tool_use_id, None)
+        if state is not None:
+            state.finish(error)
+
+    def _track_tool_blocks(self, msg: Any) -> None:
+        content = _extract_message_content(msg)
+        if content is None:
+            return
+        for block in content:
+            if _is_tool_use_block(block):
+                self._tools.start(block)
+            elif _is_tool_result_block(block):
+                # A result for the tool that spawned a subagent closes the
+                # subagent run (the stream has no dedicated subagent-end
+                # message); the subagent span must close before its parent
+                # tool span.
+                tool_use_id = _get_field(block, "tool_use_id")
+                if tool_use_id is not None:
+                    self._finish_subagent(str(tool_use_id))
+                self._tools.finish(block)
+
+    def on_message(self, msg: Any) -> None:
+        parent_tool_use_id = _extract_parent_tool_use_id(msg)
+        if parent_tool_use_id is not None:
+            state = self._subagent_state(parent_tool_use_id)
+            state.process_message(msg)
+            self._track_tool_blocks(msg)
+            if _is_result_success_message(msg) or _is_result_error_message(
+                msg
+            ):
+                self._finish_subagent(parent_tool_use_id)
+            return
+        self._root.process_message(msg)
+        self._track_tool_blocks(msg)
+
+    def finish(self, error: BaseException | None = None) -> None:
+        self._tools.finish_abandoned()
+        for key in reversed(list(self._subagents)):
+            self._finish_subagent(key)
+        self._root.finish(error)
+
+
 def _extract_prompt(
     args: tuple[Any, ...],
     kwargs: Mapping[str, Any],
@@ -484,17 +714,17 @@ def query_wrapper(
         del instance
         prompt = _extract_prompt(args, kwargs)
         invocation = _start_agent_invocation(handler, capture_content, prompt)
-        state = _AgentRunState(invocation, capture_content)
+        observer = _AgentRunObserver(handler, capture_content, invocation)
         error: BaseException | None = None
         try:
             async for message in wrapped(*args, **kwargs):
-                state.process_message(message)
+                observer.on_message(message)
                 yield message
         except Exception as exc:
             error = exc
             raise
         finally:
-            state.finish(error)
+            observer.finish(error)
 
     return traced_query
 
@@ -551,16 +781,16 @@ def client_receive_response_wrapper(
     ) -> AsyncIterator[Any]:
         prompt = getattr(instance, _LAST_PROMPT_ATTR, None)
         invocation = _start_agent_invocation(handler, capture_content, prompt)
-        state = _AgentRunState(invocation, capture_content)
+        observer = _AgentRunObserver(handler, capture_content, invocation)
         error: BaseException | None = None
         try:
             async for message in wrapped(*args, **kwargs):
-                state.process_message(message)
+                observer.on_message(message)
                 yield message
         except Exception as exc:
             error = exc
             raise
         finally:
-            state.finish(error)
+            observer.finish(error)
 
     return traced_receive_response

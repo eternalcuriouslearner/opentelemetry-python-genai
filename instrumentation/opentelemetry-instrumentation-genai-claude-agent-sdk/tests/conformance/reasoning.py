@@ -36,7 +36,7 @@ PROMPT = (
 
 
 class ReasoningScenario(Scenario):
-    expected_spans = ("invoke_agent",)
+    expected_spans = ("invoke_agent", "execute_tool")
     expected_metrics = (
         "gen_ai.client.operation.duration",
         "gen_ai.client.token.usage",
