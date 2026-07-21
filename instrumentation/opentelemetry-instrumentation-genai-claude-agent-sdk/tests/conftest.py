@@ -4,9 +4,25 @@
 """Test configuration and fixtures for Claude Agent SDK instrumentation tests."""
 # pylint: disable=redefined-outer-name
 
+from pathlib import Path
+
 import pytest
 
+from ._replay import load_cassettes
+
 pytest_plugins = ["opentelemetry.test_util_genai.fixtures"]
+
+
+@pytest.fixture
+def cassette_transport():
+    """Replay one or more complete donated OpenInference cassettes."""
+
+    cassette_dir = Path(__file__).parent / "cassettes" / "openinference"
+
+    def load(*names: str):
+        return load_cassettes(*(cassette_dir / name for name in names))
+
+    return load
 
 
 @pytest.fixture

@@ -1,0 +1,2 @@
+Add GenAI semantic-convention instrumentation for Claude Agent SDK one-shot
+queries, serialized persistent-client turns, subagents, and tool executions.

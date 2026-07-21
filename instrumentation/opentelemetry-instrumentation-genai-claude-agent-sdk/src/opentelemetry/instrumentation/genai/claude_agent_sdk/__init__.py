@@ -52,84 +52,116 @@ API
 ---
 """
 
+import importlib
 from typing import Any, Collection
 
-from opentelemetry._logs import get_logger
+from wrapt import wrap_function_wrapper
+
 from opentelemetry.instrumentation.genai.claude_agent_sdk.package import (
     _instruments,
 )
 from opentelemetry.instrumentation.instrumentor import BaseInstrumentor
-from opentelemetry.metrics import get_meter
-from opentelemetry.semconv.schemas import Schemas
-from opentelemetry.trace import get_tracer
+from opentelemetry.instrumentation.utils import unwrap
+from opentelemetry.util.genai.handler import TelemetryHandler
+
+from .patch import (
+    client_connect,
+    client_disconnect,
+    client_query,
+    client_receive_response,
+    query,
+)
 
 
 class ClaudeAgentSDKInstrumentor(BaseInstrumentor):
     """An instrumentor for the Claude Agent SDK.
 
-    This instrumentor will automatically trace Anthropic API calls and
-    optionally capture message content as events.
+    This instrumentor traces agent turns, subagents, and tools reconstructed
+    from Claude Agent SDK messages.
     """
 
     def __init__(self) -> None:
+        """Initialize the instrumentor without an active telemetry handler."""
+
         super().__init__()
-        self._tracer = None
-        self._logger = None
-        self._meter = None
+        self._handler: TelemetryHandler | None = None
 
     # pylint: disable=no-self-use
     def instrumentation_dependencies(self) -> Collection[str]:
+        """Return the Claude Agent SDK versions supported by this package.
+
+        Returns:
+            The package dependency constraints checked before instrumentation.
+        """
+
         return _instruments
 
     def _instrument(self, **kwargs: Any) -> None:
         """Enable Claude Agent SDK instrumentation.
 
         Args:
-            **kwargs: Optional arguments
-                - tracer_provider: TracerProvider instance
-                - meter_provider: MeterProvider instance
-                - logger_provider: LoggerProvider instance
+            **kwargs: Instrumentation configuration. Supported values include
+                ``tracer_provider``, ``meter_provider``, ``logger_provider``,
+                and ``completion_hook``.
         """
 
-        # Get providers from kwargs
-        tracer_provider = kwargs.get("tracer_provider")
-        logger_provider = kwargs.get("logger_provider")
-        meter_provider = kwargs.get("meter_provider")
+        handler = TelemetryHandler(
+            tracer_provider=kwargs.get("tracer_provider"),
+            meter_provider=kwargs.get("meter_provider"),
+            logger_provider=kwargs.get("logger_provider"),
+            completion_hook=kwargs.get("completion_hook"),
+        )
+        self._handler = handler
 
-        # Initialize tracer
-        tracer = get_tracer(
-            __name__,
-            "",
-            tracer_provider,
-            schema_url=Schemas.V1_28_0.value,
+        wrap_function_wrapper(
+            "claude_agent_sdk.query",
+            "query",
+            query(handler),
+        )
+        wrap_function_wrapper(
+            "claude_agent_sdk.client",
+            "ClaudeSDKClient.connect",
+            client_connect(handler),
+        )
+        wrap_function_wrapper(
+            "claude_agent_sdk.client",
+            "ClaudeSDKClient.query",
+            client_query(handler),
+        )
+        wrap_function_wrapper(
+            "claude_agent_sdk.client",
+            "ClaudeSDKClient.receive_response",
+            client_receive_response(),
+        )
+        wrap_function_wrapper(
+            "claude_agent_sdk.client",
+            "ClaudeSDKClient.disconnect",
+            client_disconnect(),
         )
 
-        # Initialize logger for events
-        logger = get_logger(
-            __name__,
-            "",
-            schema_url=Schemas.V1_28_0.value,
-            logger_provider=logger_provider,
-        )
-
-        # Initialize meter for metrics
-        meter = get_meter(
-            __name__,
-            "",
-            meter_provider,
-            schema_url=Schemas.V1_28_0.value,
-        )
-
-        # Store for later use in _uninstrument
-        self._tracer = tracer
-        self._logger = logger
-        self._meter = meter
-
-        # Patching will be added in a follow-up PR
+        # The SDK re-exports query from its package root. Point that export at
+        # the wrapped function so both supported import styles are traced.
+        claude_agent_sdk = importlib.import_module("claude_agent_sdk")
+        query_module = importlib.import_module("claude_agent_sdk.query")
+        setattr(claude_agent_sdk, "query", query_module.query)
 
     def _uninstrument(self, **kwargs: Any) -> None:
         """Disable Claude Agent SDK instrumentation.
 
         This removes all patches applied during instrumentation.
+
+        Args:
+            **kwargs: Reserved by ``BaseInstrumentor`` for uninstrumentation
+                options. This instrumentor does not currently use them.
         """
-        # Unpatching will be added in a follow-up PR
+        claude_agent_sdk = importlib.import_module("claude_agent_sdk")
+        query_module = importlib.import_module("claude_agent_sdk.query")
+        client_module = importlib.import_module("claude_agent_sdk.client")
+
+        unwrap(query_module, "query")
+        unwrap(client_module.ClaudeSDKClient, "connect")
+        unwrap(client_module.ClaudeSDKClient, "query")
+        unwrap(client_module.ClaudeSDKClient, "receive_response")
+        unwrap(client_module.ClaudeSDKClient, "disconnect")
+        setattr(claude_agent_sdk, "query", query_module.query)
+        self._handler = None
