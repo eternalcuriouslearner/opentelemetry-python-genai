@@ -7,6 +7,7 @@ fsspec>=2026.6.0
 wrapt>=2.2.2,<3.0.0
 
 # Required by instrumentation packages
+agno>=2.0.0
 anthropic>=0.117.1
 claude-agent-sdk>=0.2.126
 google-genai>=2.12.1
