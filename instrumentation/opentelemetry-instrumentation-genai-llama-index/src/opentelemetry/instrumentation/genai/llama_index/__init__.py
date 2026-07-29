@@ -27,9 +27,6 @@ Content capture is controlled through
 Completion hook configuration is forwarded from
 ``OTEL_INSTRUMENTATION_GENAI_COMPLETION_HOOK`` or
 ``instrument(completion_hook=...)``.
-
-API
----
 """
 
 from __future__ import annotations
