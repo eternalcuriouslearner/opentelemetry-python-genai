@@ -31,8 +31,16 @@ Completion hook configuration is forwarded from
 
 from __future__ import annotations
 
-from typing import Any, Collection
+from typing import Any, Collection, Protocol, cast
 
+from llama_index.core.instrumentation.event_handlers import BaseEventHandler
+from llama_index.core.instrumentation.span_handlers import BaseSpanHandler
+from llama_index_instrumentation import get_dispatcher
+
+from opentelemetry.instrumentation.genai.llama_index._handler import (
+    LlamaIndexEventHandler,
+    LlamaIndexSpanHandler,
+)
 from opentelemetry.instrumentation.genai.llama_index.package import (
     _instruments,
 )
@@ -43,24 +51,47 @@ from opentelemetry.util.genai.handler import TelemetryHandler
 __all__ = ["LlamaIndexInstrumentor"]
 
 
+class _Dispatcher(Protocol):
+    span_handlers: list[BaseSpanHandler[Any]]
+    event_handlers: list[BaseEventHandler]
+
+
 class LlamaIndexInstrumentor(BaseInstrumentor):
-    """OpenTelemetry instrumentor scaffold for LlamaIndex."""
+    """OpenTelemetry instrumentor for LlamaIndex inference calls."""
 
     def __init__(self) -> None:
         super().__init__()
         self._handler: TelemetryHandler | None = None
+        self._span_handler: LlamaIndexSpanHandler | None = None
+        self._event_handler: LlamaIndexEventHandler | None = None
 
     def instrumentation_dependencies(self) -> Collection[str]:
         return _instruments
 
     def _instrument(self, **kwargs: Any) -> None:
-        self._handler = TelemetryHandler(
+        handler = TelemetryHandler(
             tracer_provider=kwargs.get("tracer_provider"),
             meter_provider=kwargs.get("meter_provider"),
             logger_provider=kwargs.get("logger_provider"),
             completion_hook=kwargs.get("completion_hook")
             or load_completion_hook(),
         )
+        span_handler = LlamaIndexSpanHandler(handler)
+        event_handler = LlamaIndexEventHandler(span_handler)
+
+        dispatcher = cast(_Dispatcher, get_dispatcher())
+        dispatcher.span_handlers.append(span_handler)
+        dispatcher.event_handlers.append(event_handler)
+        self._handler = handler
+        self._span_handler = span_handler
+        self._event_handler = event_handler
 
     def _uninstrument(self, **kwargs: Any) -> None:
+        dispatcher = cast(_Dispatcher, get_dispatcher())
+        if self._span_handler in dispatcher.span_handlers:
+            dispatcher.span_handlers.remove(self._span_handler)
+        if self._event_handler in dispatcher.event_handlers:
+            dispatcher.event_handlers.remove(self._event_handler)
+        self._span_handler = None
+        self._event_handler = None
         self._handler = None
