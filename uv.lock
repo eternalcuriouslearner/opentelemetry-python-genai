@@ -3329,7 +3329,7 @@ instruments = [
 
 [package.metadata]
 requires-dist = [
-    { name = "anthropic", marker = "extra == 'instruments'", specifier = ">=0.51.0" },
+    { name = "anthropic", marker = "extra == 'instruments'", specifier = ">=0.51.0,<2" },
     { name = "opentelemetry-api", specifier = "~=1.43" },
     { name = "opentelemetry-instrumentation", specifier = ">=0.64b0,<1" },
     { name = "opentelemetry-semantic-conventions", specifier = ">=0.64b0,<1" },

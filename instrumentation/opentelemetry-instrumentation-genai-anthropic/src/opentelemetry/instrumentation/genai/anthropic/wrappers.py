@@ -32,9 +32,9 @@ except ImportError:
 
 if TYPE_CHECKING:
     try:
-        import httpx2 as httpx
+        import httpx2 as _http_lib
     except ImportError:
-        import httpx
+        import httpx as _http_lib
     from anthropic._streaming import AsyncStream, Stream
     from anthropic.lib.streaming._messages import (  # pylint: disable=no-name-in-module
         AsyncMessageStream,
@@ -165,7 +165,7 @@ class MessagesStreamWrapper(
         self._self_message_telemetry_finalized = False
 
     @property
-    def response(self) -> httpx.Response:
+    def response(self) -> _http_lib.Response:
         return finalize_on_close(self.stream.response, self._stop)
 
     @property
@@ -205,7 +205,7 @@ class AsyncMessagesStreamWrapper(
         self._self_message_telemetry_finalized = False
 
     @property
-    def response(self) -> httpx.Response:
+    def response(self) -> _http_lib.Response:
         return finalize_on_aclose(self.stream.response, self._stop)
 
     @property

@@ -33,7 +33,10 @@ from .utils import (
 if TYPE_CHECKING:
     from collections.abc import Iterable, Mapping
 
-    import httpx
+    try:
+        import httpx2 as _http_lib
+    except ImportError:
+        import httpx as _http_lib
     from anthropic.resources.messages import AsyncMessages, Messages
     from anthropic.types import (
         Message,
@@ -194,7 +197,7 @@ def extract_params(  # pylint: disable=too-many-locals
     extra_headers: Mapping[str, str] | None = None,
     extra_query: Mapping[str, object] | None = None,
     extra_body: object | None = None,
-    timeout: float | httpx.Timeout | None = None,
+    timeout: float | _http_lib.Timeout | None = None,
     **_kwargs: object,
 ) -> MessageRequestParams:
     return MessageRequestParams(

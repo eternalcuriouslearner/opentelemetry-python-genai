@@ -9,11 +9,19 @@ import json
 import os
 from pathlib import Path
 
-import httpx
 import pytest
+
+try:
+    import httpx
+except ImportError:
+    import httpx2 as httpx
 from anthropic import Anthropic, APIConnectionError, NotFoundError
-from anthropic._legacy_response import LegacyAPIResponse
 from anthropic._response import APIResponse
+
+try:
+    from anthropic._legacy_response import LegacyAPIResponse
+except ImportError:
+    from anthropic._response import APIResponse as LegacyAPIResponse
 from anthropic._streaming import Stream as AnthropicStream
 from anthropic.resources.messages import Messages as _Messages
 from anthropic.types import (
@@ -404,23 +412,27 @@ def test_sync_messages_create_with_all_params(
     model = "claude-sonnet-4-20250514"
     messages = [{"role": "user", "content": "Say hello."}]
 
-    anthropic_client.messages.create(
-        model=model,
-        max_tokens=50,
-        messages=messages,
-        temperature=0.7,
-        top_p=0.9,
-        top_k=40,
-        stop_sequences=["STOP"],
-    )
+    kwargs = {
+        "model": model,
+        "max_tokens": 50,
+        "messages": messages,
+        "stop_sequences": ["STOP"],
+    }
+    if "temperature" in _create_params:
+        kwargs.update(temperature=0.7, top_p=0.9, top_k=40)
+
+    anthropic_client.messages.create(**kwargs)
 
     spans = span_exporter.get_finished_spans()
     assert len(spans) == 1
     span = spans[0]
     assert span.attributes[GenAIAttributes.GEN_AI_REQUEST_MAX_TOKENS] == 50
-    assert span.attributes[GenAIAttributes.GEN_AI_REQUEST_TEMPERATURE] == 0.7
-    assert span.attributes[GenAIAttributes.GEN_AI_REQUEST_TOP_P] == 0.9
-    assert span.attributes[GenAIAttributes.GEN_AI_REQUEST_TOP_K] == 40
+    if "temperature" in kwargs:
+        assert (
+            span.attributes[GenAIAttributes.GEN_AI_REQUEST_TEMPERATURE] == 0.7
+        )
+        assert span.attributes[GenAIAttributes.GEN_AI_REQUEST_TOP_P] == 0.9
+        assert span.attributes[GenAIAttributes.GEN_AI_REQUEST_TOP_K] == 40
     # OpenTelemetry converts lists to tuples when storing as attributes
     assert span.attributes[GenAIAttributes.GEN_AI_REQUEST_STOP_SEQUENCES] == (
         "STOP",
