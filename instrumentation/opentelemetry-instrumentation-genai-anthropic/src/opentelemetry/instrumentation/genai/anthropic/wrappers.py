@@ -31,7 +31,10 @@ except ImportError:
     _sdk_accumulate_event = None
 
 if TYPE_CHECKING:
-    import httpx
+    try:
+        import httpx2 as httpx
+    except ImportError:
+        import httpx
     from anthropic._streaming import AsyncStream, Stream
     from anthropic.lib.streaming._messages import (  # pylint: disable=no-name-in-module
         AsyncMessageStream,
