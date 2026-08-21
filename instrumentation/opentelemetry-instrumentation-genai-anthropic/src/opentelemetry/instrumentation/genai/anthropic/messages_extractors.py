@@ -7,7 +7,7 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 from urllib.parse import urlparse
 
 try:
@@ -214,10 +214,13 @@ def extract_params(  # pylint: disable=too-many-locals
     )
 
 
+# TODO: Move this cross-instrumentation URL extraction to
+# opentelemetry-util-genai instead of maintaining provider-specific copies.
 def get_server_address_and_port(
-    client: Any,
+    client_instance: Messages | AsyncMessages,
 ) -> tuple[str | None, int | None]:
-    base_url = getattr(client, "base_url", None)
+    base_client = getattr(client_instance, "_client", None)
+    base_url = getattr(base_client, "base_url", None)
     if not base_url:
         return None, None
 
@@ -250,7 +253,7 @@ def get_llm_request_attributes(
         GenAIAttributes.GEN_AI_REQUEST_TOP_K: params.top_k,
         GenAIAttributes.GEN_AI_REQUEST_STOP_SEQUENCES: params.stop_sequences,
     }
-    address, port = get_server_address_and_port(client_instance._client)
+    address, port = get_server_address_and_port(client_instance)
     if address is not None:
         attributes[ServerAttributes.SERVER_ADDRESS] = address
     if port is not None:

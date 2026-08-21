@@ -76,7 +76,7 @@ _has_thinking_param = "thinking" in _create_params
     ],
 )
 def test_get_server_address_and_port(base_url, expected):
-    client = SimpleNamespace(base_url=base_url)
+    client = SimpleNamespace(_client=SimpleNamespace(base_url=base_url))
 
     assert get_server_address_and_port(client) == expected
 
