@@ -214,8 +214,6 @@ def extract_params(  # pylint: disable=too-many-locals
     )
 
 
-# TODO: Move this cross-instrumentation URL extraction to
-# opentelemetry-util-genai instead of maintaining provider-specific copies.
 def get_server_address_and_port(
     client_instance: Messages | AsyncMessages,
 ) -> tuple[str | None, int | None]:
