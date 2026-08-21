@@ -11,6 +11,10 @@ import logging
 from collections.abc import Awaitable, Callable
 from typing import TYPE_CHECKING, Any, cast
 
+try:
+    import httpx2 as _http_lib
+except ImportError:
+    import httpx as _http_lib
 from anthropic._models import construct_type
 from anthropic.types import Message as AnthropicMessage
 
@@ -428,11 +432,8 @@ def _body_was_read(http_response: Any) -> bool:
         return False
     try:
         http_response.content  # pylint: disable=pointless-statement
-    except RuntimeError as error:
-        # Anthropic 0.x and 1.x use unrelated httpx/httpx2 exception classes.
-        if type(error).__name__ == "ResponseNotRead":
-            return False
-        raise
+    except _http_lib.ResponseNotRead:
+        return False
     return True
 
 

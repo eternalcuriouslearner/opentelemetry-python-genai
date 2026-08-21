@@ -7,8 +7,13 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 from dataclasses import dataclass
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
+from urllib.parse import urlparse
 
+try:
+    import httpx2 as _http_lib
+except ImportError:
+    import httpx as _http_lib
 from anthropic.types import MessageDeltaUsage
 
 from opentelemetry.semconv._incubating.attributes import (
@@ -33,10 +38,6 @@ from .utils import (
 if TYPE_CHECKING:
     from collections.abc import Iterable, Mapping
 
-    try:
-        import httpx2 as _http_lib
-    except ImportError:
-        import httpx as _http_lib
     from anthropic.resources.messages import AsyncMessages, Messages
     from anthropic.types import (
         Message,
@@ -214,14 +215,24 @@ def extract_params(  # pylint: disable=too-many-locals
 
 
 def get_server_address_and_port(
-    client_instance: Messages | AsyncMessages,
+    client: Any,
 ) -> tuple[str | None, int | None]:
-    base_url = client_instance._client.base_url
-    port = base_url.port
-    return (
-        base_url.host or None,
-        port if port and port != 443 and port > 0 else None,
-    )
+    base_url = getattr(client, "base_url", None)
+    if not base_url:
+        return None, None
+
+    server_address = getattr(base_url, "host", None)
+    server_port = getattr(base_url, "port", None)
+
+    if server_address is None:
+        parsed = urlparse(str(base_url))
+        server_address = parsed.hostname
+        server_port = parsed.port
+
+    if server_port in (80, 443):
+        server_port = None
+
+    return server_address, server_port
 
 
 def get_llm_request_attributes(
@@ -239,7 +250,7 @@ def get_llm_request_attributes(
         GenAIAttributes.GEN_AI_REQUEST_TOP_K: params.top_k,
         GenAIAttributes.GEN_AI_REQUEST_STOP_SEQUENCES: params.stop_sequences,
     }
-    address, port = get_server_address_and_port(client_instance)
+    address, port = get_server_address_and_port(client_instance._client)
     if address is not None:
         attributes[ServerAttributes.SERVER_ADDRESS] = address
     if port is not None:

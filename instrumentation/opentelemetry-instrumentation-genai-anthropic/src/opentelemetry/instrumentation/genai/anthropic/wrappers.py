@@ -12,6 +12,11 @@ from typing import (
     cast,
 )
 
+try:
+    import httpx2 as _http_lib
+except ImportError:
+    import httpx as _http_lib
+
 from opentelemetry.util.genai.stream import (
     AsyncStreamManagerWrapper,
     AsyncStreamWrapper,
@@ -31,10 +36,6 @@ except ImportError:
     _sdk_accumulate_event = None
 
 if TYPE_CHECKING:
-    try:
-        import httpx2 as _http_lib
-    except ImportError:
-        import httpx as _http_lib
     from anthropic._streaming import AsyncStream, Stream
     from anthropic.lib.streaming._messages import (  # pylint: disable=no-name-in-module
         AsyncMessageStream,

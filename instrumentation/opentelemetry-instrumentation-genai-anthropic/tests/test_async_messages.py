@@ -9,9 +9,9 @@ import json
 import pytest
 
 try:
-    import httpx
+    import httpx2 as _http_lib
 except ImportError:
-    import httpx2 as httpx
+    import httpx as _http_lib
 from anthropic import APIConnectionError, AsyncAnthropic, NotFoundError
 from anthropic._response import AsyncAPIResponse
 
@@ -1507,9 +1507,9 @@ async def test_async_messages_raw_response_parse_to_honors_cast_target(
         messages=[{"role": "user", "content": "Say hello in one word."}],
     ) as raw_response:
         await raw_response.parse()
-        as_httpx = await raw_response.parse(to=httpx.Response)
+        as_httpx = await raw_response.parse(to=_http_lib.Response)
 
-    assert isinstance(as_httpx, httpx.Response)
+    assert isinstance(as_httpx, _http_lib.Response)
 
 
 @pytest.mark.cassette("test_async_messages_create_with_raw_response")
