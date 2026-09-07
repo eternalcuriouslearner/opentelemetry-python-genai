@@ -958,8 +958,23 @@ async def test_agent_workflow_uses_executing_agent_tool_metadata(
     def first_lookup(value: str) -> str:
         return f"first: {value}"
 
-    def second_lookup(value: str) -> str:
-        return f"second: {value}"
+    class GenericLookupTool(AsyncBaseTool):
+        @property
+        def metadata(self) -> ToolMetadata:
+            return ToolMetadata(
+                name="lookup", description="Second lookup description."
+            )
+
+        def call(self, value: str) -> ToolOutput:
+            return ToolOutput(
+                tool_name="lookup",
+                content=f"second: {value}",
+                raw_input={"value": value},
+                raw_output=value,
+            )
+
+        async def acall(self, value: str) -> ToolOutput:
+            return self.call(value)
 
     first_agent = FunctionAgent(
         name="first-agent",
@@ -986,13 +1001,7 @@ async def test_agent_workflow_uses_executing_agent_tool_metadata(
             is_chat_model=True,
             response_generator=response_generator,
         ),
-        tools=[
-            FunctionTool.from_defaults(
-                second_lookup,
-                name="lookup",
-                description="Second lookup description.",
-            )
-        ],
+        tools=[GenericLookupTool()],
         streaming=False,
     )
     workflow = AgentWorkflow(
@@ -1005,6 +1014,9 @@ async def test_agent_workflow_uses_executing_agent_tool_metadata(
     tool_span = _spans_named(span_exporter, "execute_tool lookup")[0]
     assert tool_span.attributes[GenAIAttributes.GEN_AI_TOOL_DESCRIPTION] == (
         "Second lookup description."
+    )
+    assert tool_span.attributes[GenAIAttributes.GEN_AI_TOOL_TYPE] == (
+        "GenericLookupTool"
     )
 
 
