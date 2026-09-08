@@ -401,6 +401,11 @@ class _LlamaIndexInvocation(BaseSpan):
     ) = PrivateAttr()
     _workflow_agents: dict[str, BaseWorkflowAgent] = PrivateAttr()
     _workflow_agents_by_run_id: dict[str, BaseWorkflowAgent] = PrivateAttr()
+    _workflow_invocations_by_run_id: dict[str, AgentInvocation] = PrivateAttr()
+    _workflow_invocations_by_key: dict[tuple[str, str], AgentInvocation] = (
+        PrivateAttr()
+    )
+    _workflow_agent_invocation: AgentInvocation | None = PrivateAttr()
 
     def __init__(
         self,
@@ -415,6 +420,7 @@ class _LlamaIndexInvocation(BaseSpan):
         workflow_agents: Mapping[str, BaseWorkflowAgent] | None = None,
         workflow_run_id: str | None = None,
         workflow_agent: BaseWorkflowAgent | None = None,
+        workflow_agent_invocation: AgentInvocation | None = None,
     ) -> None:
         """Create the adapter used by LlamaIndex's span-handler lifecycle."""
         super().__init__(id_=id_, parent_id=parent_id)
@@ -422,8 +428,18 @@ class _LlamaIndexInvocation(BaseSpan):
         self._tool_attributes_token = tool_attributes_token
         self._workflow_agents = dict(workflow_agents or {})
         self._workflow_agents_by_run_id = {}
+        self._workflow_invocations_by_run_id = {}
+        self._workflow_invocations_by_key = {}
+        self._workflow_agent_invocation = workflow_agent_invocation
         if workflow_run_id is not None and workflow_agent is not None:
             self.register_workflow_agent(workflow_run_id, workflow_agent)
+        if (
+            workflow_run_id is not None
+            and workflow_agent_invocation is not None
+        ):
+            self._workflow_invocations_by_run_id[workflow_run_id] = (
+                workflow_agent_invocation
+            )
 
     def workflow_agent(self, name: str) -> BaseWorkflowAgent | None:
         """Return a member agent owned by this workflow invocation."""
@@ -442,6 +458,25 @@ class _LlamaIndexInvocation(BaseSpan):
         if run_id is None:
             return None
         return self._workflow_agents_by_run_id.get(run_id)
+
+    def workflow_invocation_for_run_id(
+        self, run_id: str | None, agent_name: str | None = None
+    ) -> AgentInvocation | None:
+        """Return the reusable member-agent invocation for a workflow run."""
+        if self._workflow_agent_invocation is not None:
+            return self._workflow_agent_invocation
+        if run_id is None:
+            return None
+        if agent_name is not None:
+            return self._workflow_invocations_by_key.get((run_id, agent_name))
+        return self._workflow_invocations_by_run_id.get(run_id)
+
+    def register_workflow_invocation(
+        self, run_id: str, agent_name: str, invocation: AgentInvocation
+    ) -> None:
+        """Keep one member-agent invocation open across workflow turns."""
+        self._workflow_invocations_by_run_id[run_id] = invocation
+        self._workflow_invocations_by_key[(run_id, agent_name)] = invocation
 
     def reset_tool_attributes(self) -> None:
         """Restore task-local tool metadata after an agent run finishes."""
@@ -485,6 +520,7 @@ class LlamaIndexSpanHandler(BaseSpanHandler[_LlamaIndexInvocation]):
         workflow_agents: Mapping[str, BaseWorkflowAgent] | None = None
         workflow_run_id: str | None = None
         workflow_agent: BaseWorkflowAgent | None = None
+        workflow_agent_invocation: AgentInvocation | None = None
 
         if isinstance(instance, AgentWorkflow) and method_name == "run":
             capture_content = self._handler.should_capture_content()
@@ -558,14 +594,32 @@ class LlamaIndexSpanHandler(BaseSpanHandler[_LlamaIndexInvocation]):
                 if capture_content and agent.system_prompt
                 else []
             )
-            agent_invocation = self._handler.invoke_local_agent(
-                request_model=request_model,
-                agent_name=agent_name,
+            workflow_run_id = (
+                tags.get("llamaindex.run_id") if tags is not None else None
             )
-            agent_invocation.agent_description = agent_description
-            agent_invocation.input_messages = input_messages
-            agent_invocation.tool_definitions = tool_definitions
-            agent_invocation.system_instruction = system_instruction
+            workflow_agent_invocation = (
+                parent.workflow_invocation_for_run_id(
+                    workflow_run_id, agent_name
+                )
+                if parent is not None
+                else None
+            )
+            if workflow_agent_invocation is None:
+                workflow_agent_invocation = self._handler.invoke_local_agent(
+                    request_model=request_model,
+                    agent_name=agent_name,
+                )
+                workflow_agent_invocation.agent_description = agent_description
+                workflow_agent_invocation.input_messages = input_messages
+                workflow_agent_invocation.tool_definitions = tool_definitions
+                workflow_agent_invocation.system_instruction = (
+                    system_instruction
+                )
+                if parent is not None and workflow_run_id is not None:
+                    parent.register_workflow_invocation(
+                        workflow_run_id, agent_name, workflow_agent_invocation
+                    )
+            agent_invocation = workflow_agent_invocation
             invocation = agent_invocation
             if parent is not None:
                 workflow_run_id = (
@@ -589,6 +643,13 @@ class LlamaIndexSpanHandler(BaseSpanHandler[_LlamaIndexInvocation]):
                 if parent is not None
                 else None
             )
+            active_invocation = (
+                parent.workflow_invocation_for_run_id(
+                    tags.get("llamaindex.run_id") if tags is not None else None
+                )
+                if parent is not None
+                else None
+            )
             tool_type, tool_description = (
                 _agent_tool_attributes(active_agent, tool_call.tool_name)
                 if active_agent is not None
@@ -606,6 +667,11 @@ class LlamaIndexSpanHandler(BaseSpanHandler[_LlamaIndexInvocation]):
             tool_invocation = self._handler.tool(
                 tool_call.tool_name,
                 tool_type=tool_type,
+                parent_context=(
+                    active_invocation.span_context
+                    if active_invocation is not None
+                    else None
+                ),
             )
             tool_invocation.tool_call_id = tool_call.tool_id
             tool_invocation.tool_description = tool_description
@@ -652,6 +718,7 @@ class LlamaIndexSpanHandler(BaseSpanHandler[_LlamaIndexInvocation]):
             workflow_agents=workflow_agents,
             workflow_run_id=workflow_run_id,
             workflow_agent=workflow_agent,
+            workflow_agent_invocation=workflow_agent_invocation,
         )
 
     def prepare_to_exit_span(
@@ -680,6 +747,10 @@ class LlamaIndexSpanHandler(BaseSpanHandler[_LlamaIndexInvocation]):
                     _set_agent_step_output(span._invocation, result)
                 else:
                     _set_agent_output(span._invocation, result)
+            if span._workflow_agent_invocation is not None:
+                if isinstance(result, AgentOutput):
+                    span._invocation.stop()
+                return span
         elif isinstance(span._invocation, ToolInvocation):
             tool_output: ToolOutput | None = None
             if isinstance(result, ToolCallResult):

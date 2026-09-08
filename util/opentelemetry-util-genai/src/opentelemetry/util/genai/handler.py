@@ -41,6 +41,7 @@ from opentelemetry._logs import (
     LoggerProvider,
     get_logger,
 )
+from opentelemetry.context import Context
 from opentelemetry.metrics import MeterProvider, get_meter
 from opentelemetry.semconv.schemas import Schemas
 from opentelemetry.trace import (
@@ -417,6 +418,7 @@ class TelemetryHandler:
         agent_name: str | None = None,
         tool_call_id: str | None = None,
         tool_description: str | None = None,
+        parent_context: Context | None = None,
     ) -> ToolInvocation:
         """Returns a Tool invocation. Starts span when called.
 
@@ -444,6 +446,7 @@ class TelemetryHandler:
             tool_call_id=tool_call_id,
             tool_description=tool_description,
             content_capturing_mode=self._content_capturing_mode,
+            parent_context=parent_context,
         )
 
     def start_invoke_local_agent(

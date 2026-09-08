@@ -887,7 +887,7 @@ async def test_agent_workflow_emits_span_hierarchy(
     )
 
     agent_spans = _spans_named(span_exporter, "invoke_agent workflow-agent")
-    assert len(agent_spans) == 2
+    assert len(agent_spans) == 1
     assert all(
         span.parent is not None
         and span.parent.span_id == workflow_span.context.span_id
@@ -898,7 +898,7 @@ async def test_agent_workflow_emits_span_hierarchy(
     tool_spans = _spans_named(span_exporter, "execute_tool echo")
     assert len(tool_spans) == 1
     assert tool_spans[0].parent is not None
-    assert tool_spans[0].parent.span_id == workflow_span.context.span_id
+    assert tool_spans[0].parent.span_id == agent_spans[0].context.span_id
     assert tool_spans[0].context.trace_id == workflow_span.context.trace_id
 
     FunctionTool.from_defaults(echo)(value="after workflow")
@@ -1169,10 +1169,13 @@ async def test_agent_workflow_instruments_function_and_react_members(
     assert (
         handoff_span.attributes[GenAIAttributes.GEN_AI_TOOL_TYPE] == "function"
     )
-    for span in (function_span, react_span, handoff_span):
+    for span in (function_span, react_span):
         assert span.parent is not None
         assert span.parent.span_id == workflow_span.context.span_id
         assert span.context.trace_id == workflow_span.context.trace_id
+    assert handoff_span.parent is not None
+    assert handoff_span.parent.span_id == function_span.context.span_id
+    assert handoff_span.context.trace_id == workflow_span.context.trace_id
 
 
 def test_sync_tool_span(

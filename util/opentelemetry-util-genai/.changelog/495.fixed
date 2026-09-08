@@ -1,0 +1,1 @@
+Allow tool invocations to be created with an explicit parent span context.

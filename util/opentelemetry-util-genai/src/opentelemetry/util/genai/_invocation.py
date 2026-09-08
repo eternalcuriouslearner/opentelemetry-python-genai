@@ -110,6 +110,11 @@ class GenAIInvocation(AbstractContextManager["GenAIInvocation"]):
         self._stream_last_chunk_at: float | None = None
 
     @property
+    def span_context(self) -> Context:
+        """Return the context rooted at this invocation's span."""
+        return self._span_context
+
+    @property
     def should_capture_content(self) -> bool:
         """Return True when message content should be captured for this invocation."""
         return self._content_capturing_mode in (
@@ -126,7 +131,10 @@ class GenAIInvocation(AbstractContextManager["GenAIInvocation"]):
         )
 
     def _start(
-        self, attributes: dict[str, AttributeValue] | None = None
+        self,
+        attributes: dict[str, AttributeValue] | None = None,
+        *,
+        parent_context: Context | None = None,
     ) -> None:
         """Start the invocation span and attach it to the current context.
 
@@ -137,6 +145,7 @@ class GenAIInvocation(AbstractContextManager["GenAIInvocation"]):
             name=self._span_name,
             kind=self._span_kind,
             attributes=attributes,
+            context=parent_context,
         )
         self._span_context = set_span_in_context(self.span)
         self._monotonic_start_s = timeit.default_timer()
