@@ -353,6 +353,25 @@ def _set_agent_step_output(invocation: AgentInvocation, result: Any) -> None:
         invocation.output_messages = [_output_message(result.response)]
 
 
+def _agent_step_tool_calls(result: AgentOutput) -> list[ToolCallBlock]:
+    """Return tool calls emitted by a workflow agent step."""
+    return [
+        block
+        for block in result.response.blocks
+        if isinstance(block, ToolCallBlock)
+    ]
+
+
+def _agent_step_is_complete(result: Any) -> bool:
+    """Return whether a workflow agent step produced a final response."""
+    if not isinstance(result, AgentOutput):
+        return False
+    tool_calls = _agent_step_tool_calls(result)
+    return not tool_calls or all(
+        block.tool_name == "handoff" for block in tool_calls
+    )
+
+
 def _set_workflow_output(invocation: WorkflowInvocation, result: Any) -> None:
     """Copy the final response out of an AgentWorkflow stop event."""
     output = getattr(result, "result", None)
@@ -477,6 +496,18 @@ class _LlamaIndexInvocation(BaseSpan):
         """Keep one member-agent invocation open across workflow turns."""
         self._workflow_invocations_by_run_id[run_id] = invocation
         self._workflow_invocations_by_key[(run_id, agent_name)] = invocation
+
+    def remove_workflow_invocation(self, invocation: AgentInvocation) -> None:
+        """Forget a completed member invocation so a later turn can restart it."""
+        for key, value in list(self._workflow_invocations_by_key.items()):
+            if value is invocation:
+                del self._workflow_invocations_by_key[key]
+                run_id = key[0]
+                if (
+                    self._workflow_invocations_by_run_id.get(run_id)
+                    is invocation
+                ):
+                    del self._workflow_invocations_by_run_id[run_id]
 
     def reset_tool_attributes(self) -> None:
         """Restore task-local tool metadata after an agent run finishes."""
@@ -650,6 +681,9 @@ class LlamaIndexSpanHandler(BaseSpanHandler[_LlamaIndexInvocation]):
                 if parent is not None
                 else None
             )
+            workflow_run_id = (
+                tags.get("llamaindex.run_id") if tags is not None else None
+            )
             tool_type, tool_description = (
                 _agent_tool_attributes(active_agent, tool_call.tool_name)
                 if active_agent is not None
@@ -680,6 +714,7 @@ class LlamaIndexSpanHandler(BaseSpanHandler[_LlamaIndexInvocation]):
                     dict[str, Any], cast(Any, tool_call).tool_kwargs
                 )
             invocation = tool_invocation
+            workflow_agent_invocation = active_invocation
         elif isinstance(instance, FunctionTool) and method_name in {
             "call",
             "acall",
@@ -748,8 +783,14 @@ class LlamaIndexSpanHandler(BaseSpanHandler[_LlamaIndexInvocation]):
                 else:
                     _set_agent_output(span._invocation, result)
             if span._workflow_agent_invocation is not None:
-                if isinstance(result, AgentOutput):
+                if _agent_step_is_complete(result):
                     span._invocation.stop()
+                    if isinstance(
+                        result, AgentOutput
+                    ) and not _agent_step_tool_calls(result):
+                        parent = self.open_spans.get(span.parent_id or "")
+                        if parent is not None:
+                            parent.remove_workflow_invocation(span._invocation)
                 return span
         elif isinstance(span._invocation, ToolInvocation):
             tool_output: ToolOutput | None = None
@@ -771,6 +812,13 @@ class LlamaIndexSpanHandler(BaseSpanHandler[_LlamaIndexInvocation]):
                     )
                     span._invocation.fail(error)
                     return span
+            if span._workflow_agent_invocation is not None:
+                if not span._workflow_agent_invocation.span.is_recording():
+                    parent = self.open_spans.get(span.parent_id or "")
+                    if parent is not None:
+                        parent.remove_workflow_invocation(
+                            span._workflow_agent_invocation
+                        )
         span._invocation.stop()
         return span
 
