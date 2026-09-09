@@ -4,7 +4,6 @@
 from __future__ import annotations
 
 from opentelemetry._logs import Logger
-from opentelemetry.context import Context
 from opentelemetry.semconv._incubating.attributes import (
     gen_ai_attributes as GenAI,
 )
@@ -66,7 +65,6 @@ class ToolInvocation(GenAIInvocation):
         tool_call_id: str | None = None,
         tool_description: str | None = None,
         content_capturing_mode: ContentCapturingMode | None = None,
-        parent_context: Context | None = None,
     ) -> None:
         """Use handler.tool(name) instead of calling this directly.
 
@@ -97,9 +95,7 @@ class ToolInvocation(GenAIInvocation):
         self.tool_description: str | None = tool_description
         self._tool_type: str | None = tool_type
         self._agent_name: str | None = agent_name
-        self._start(
-            self._get_start_attributes(), parent_context=parent_context
-        )
+        self._start(self._get_start_attributes())
 
     @property
     def should_capture_content_on_span(self) -> bool:

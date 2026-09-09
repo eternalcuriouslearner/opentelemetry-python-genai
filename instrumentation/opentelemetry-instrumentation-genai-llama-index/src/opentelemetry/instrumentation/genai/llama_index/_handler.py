@@ -33,6 +33,8 @@ from llama_index.core.instrumentation.span_handlers import BaseSpanHandler
 from llama_index.core.tools import BaseTool, FunctionTool, ToolOutput
 from pydantic import PrivateAttr
 
+from opentelemetry.context import attach, detach
+from opentelemetry.trace import set_span_in_context
 from opentelemetry.util.genai.handler import TelemetryHandler
 from opentelemetry.util.genai.invocation import (
     AgentInvocation,
@@ -366,10 +368,7 @@ def _agent_step_is_complete(result: Any) -> bool:
     """Return whether a workflow agent step produced a final response."""
     if not isinstance(result, AgentOutput):
         return False
-    tool_calls = _agent_step_tool_calls(result)
-    return not tool_calls or all(
-        block.tool_name == "handoff" for block in tool_calls
-    )
+    return not _agent_step_tool_calls(result)
 
 
 def _set_workflow_output(invocation: WorkflowInvocation, result: Any) -> None:
@@ -425,6 +424,7 @@ class _LlamaIndexInvocation(BaseSpan):
         PrivateAttr()
     )
     _workflow_agent_invocation: AgentInvocation | None = PrivateAttr()
+    _workflow_handoff: bool = PrivateAttr()
 
     def __init__(
         self,
@@ -440,6 +440,7 @@ class _LlamaIndexInvocation(BaseSpan):
         workflow_run_id: str | None = None,
         workflow_agent: BaseWorkflowAgent | None = None,
         workflow_agent_invocation: AgentInvocation | None = None,
+        workflow_handoff: bool = False,
     ) -> None:
         """Create the adapter used by LlamaIndex's span-handler lifecycle."""
         super().__init__(id_=id_, parent_id=parent_id)
@@ -450,6 +451,7 @@ class _LlamaIndexInvocation(BaseSpan):
         self._workflow_invocations_by_run_id = {}
         self._workflow_invocations_by_key = {}
         self._workflow_agent_invocation = workflow_agent_invocation
+        self._workflow_handoff = workflow_handoff
         if workflow_run_id is not None and workflow_agent is not None:
             self.register_workflow_agent(workflow_run_id, workflow_agent)
         if (
@@ -552,6 +554,7 @@ class LlamaIndexSpanHandler(BaseSpanHandler[_LlamaIndexInvocation]):
         workflow_run_id: str | None = None
         workflow_agent: BaseWorkflowAgent | None = None
         workflow_agent_invocation: AgentInvocation | None = None
+        workflow_handoff = False
 
         if isinstance(instance, AgentWorkflow) and method_name == "run":
             capture_content = self._handler.should_capture_content()
@@ -698,15 +701,23 @@ class LlamaIndexSpanHandler(BaseSpanHandler[_LlamaIndexInvocation]):
                 # AgentWorkflow's built-in handoff is emitted as a ToolCall,
                 # although its generated tool metadata is not available here.
                 tool_type = "function"
-            tool_invocation = self._handler.tool(
-                tool_call.tool_name,
-                tool_type=tool_type,
-                parent_context=(
-                    active_invocation.span_context
-                    if active_invocation is not None
-                    else None
-                ),
+            # The member-agent span stays open across workflow steps, each of
+            # which runs in its own asyncio task, so that span is not in the
+            # ambient context here. Attach it so the tool span nests under the
+            # agent that requested the call.
+            agent_context_token = (
+                attach(set_span_in_context(active_invocation.span))
+                if active_invocation is not None
+                else None
             )
+            try:
+                tool_invocation = self._handler.tool(
+                    tool_call.tool_name,
+                    tool_type=tool_type,
+                )
+            finally:
+                if agent_context_token is not None:
+                    detach(agent_context_token)
             tool_invocation.tool_call_id = tool_call.tool_id
             tool_invocation.tool_description = tool_description
             if tool_invocation.should_capture_content:
@@ -715,6 +726,7 @@ class LlamaIndexSpanHandler(BaseSpanHandler[_LlamaIndexInvocation]):
                 )
             invocation = tool_invocation
             workflow_agent_invocation = active_invocation
+            workflow_handoff = tool_call.tool_name == "handoff"
         elif isinstance(instance, FunctionTool) and method_name in {
             "call",
             "acall",
@@ -754,7 +766,31 @@ class LlamaIndexSpanHandler(BaseSpanHandler[_LlamaIndexInvocation]):
             workflow_run_id=workflow_run_id,
             workflow_agent=workflow_agent,
             workflow_agent_invocation=workflow_agent_invocation,
+            workflow_handoff=workflow_handoff,
         )
+
+    def _release_workflow_invocation(
+        self,
+        span: _LlamaIndexInvocation,
+        invocation: AgentInvocation,
+    ) -> None:
+        """Drop a finished member invocation so a later turn opens a new span."""
+        parent = self.open_spans.get(span.parent_id or "")
+        if parent is not None:
+            parent.remove_workflow_invocation(invocation)
+
+    def _complete_handoff_agent(self, span: _LlamaIndexInvocation) -> None:
+        """End the member-agent invocation once its handoff tool has finished.
+
+        AgentWorkflow reports the handoff as a tool call made by the agent that
+        is stepping down, so that agent's span has to stay open until the tool
+        call ends or the tool span falls outside its parent.
+        """
+        invocation = span._workflow_agent_invocation
+        if invocation is None or not span._workflow_handoff:
+            return
+        invocation.stop()
+        self._release_workflow_invocation(span, invocation)
 
     def prepare_to_exit_span(
         self,
@@ -785,12 +821,7 @@ class LlamaIndexSpanHandler(BaseSpanHandler[_LlamaIndexInvocation]):
             if span._workflow_agent_invocation is not None:
                 if _agent_step_is_complete(result):
                     span._invocation.stop()
-                    if isinstance(
-                        result, AgentOutput
-                    ) and not _agent_step_tool_calls(result):
-                        parent = self.open_spans.get(span.parent_id or "")
-                        if parent is not None:
-                            parent.remove_workflow_invocation(span._invocation)
+                    self._release_workflow_invocation(span, span._invocation)
                 return span
         elif isinstance(span._invocation, ToolInvocation):
             tool_output: ToolOutput | None = None
@@ -811,15 +842,10 @@ class LlamaIndexSpanHandler(BaseSpanHandler[_LlamaIndexInvocation]):
                         else RuntimeError(tool_output.content)
                     )
                     span._invocation.fail(error)
+                    self._complete_handoff_agent(span)
                     return span
-            if span._workflow_agent_invocation is not None:
-                if not span._workflow_agent_invocation.span.is_recording():
-                    parent = self.open_spans.get(span.parent_id or "")
-                    if parent is not None:
-                        parent.remove_workflow_invocation(
-                            span._workflow_agent_invocation
-                        )
         span._invocation.stop()
+        self._complete_handoff_agent(span)
         return span
 
     def prepare_to_drop_span(
@@ -839,4 +865,8 @@ class LlamaIndexSpanHandler(BaseSpanHandler[_LlamaIndexInvocation]):
             span._invocation.stop()
         else:
             span._invocation.fail(err)
+        if isinstance(span._invocation, AgentInvocation):
+            self._release_workflow_invocation(span, span._invocation)
+        else:
+            self._complete_handoff_agent(span)
         return span

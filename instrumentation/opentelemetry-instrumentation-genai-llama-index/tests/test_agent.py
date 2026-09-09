@@ -38,6 +38,7 @@ from openai import RateLimitError
 from opentelemetry.instrumentation.genai.llama_index._handler import (
     _agent_input,
     _input_message,
+    _LlamaIndexInvocation,
     _method_name,
     _output_message,
     _set_agent_output,
@@ -1176,6 +1177,10 @@ async def test_agent_workflow_instruments_function_and_react_members(
     assert handoff_span.parent is not None
     assert handoff_span.parent.span_id == function_span.context.span_id
     assert handoff_span.context.trace_id == workflow_span.context.trace_id
+    # The handing-off agent stays open until its handoff tool call ends, so
+    # the tool span falls inside its parent rather than after it.
+    assert handoff_span.start_time >= function_span.start_time
+    assert handoff_span.end_time <= function_span.end_time
 
 
 def test_sync_tool_span(
@@ -1273,3 +1278,61 @@ def test_tool_error_re_raises(span_exporter, instrument_llama_index) -> None:
     span = spans[0]
     assert span.status.status_code == StatusCode.ERROR
     assert span.attributes[ErrorAttributes.ERROR_TYPE] == "RuntimeError"
+
+
+@pytest.mark.asyncio
+async def test_agent_workflow_releases_member_invocation_on_failure(
+    span_exporter, instrument_llama_index
+) -> None:
+    """A dropped agent step must not leave its ended invocation reusable."""
+
+    def response_generator(messages, **kwargs):
+        if any(message.role.value == "tool" for message in messages):
+            raise RuntimeError("llm failed")
+        return ChatMessage(
+            role="assistant",
+            blocks=[
+                ToolCallBlock(
+                    tool_call_id="call-1",
+                    tool_name="echo",
+                    tool_kwargs={"value": "hello"},
+                )
+            ],
+        )
+
+    agent = FunctionAgent(
+        name="failing-agent",
+        description="Fails after a tool call.",
+        llm=MockFunctionCallingLLM(
+            is_chat_model=True,
+            response_generator=response_generator,
+        ),
+        tools=[
+            FunctionTool.from_defaults(
+                lambda value: value, name="echo", description="Echoes."
+            )
+        ],
+        streaming=False,
+    )
+    workflow = AgentWorkflow(agents=[agent])
+
+    registries: list[_LlamaIndexInvocation] = []
+    register = _LlamaIndexInvocation.register_workflow_invocation
+
+    def capture(self, run_id, agent_name, invocation):
+        registries.append(self)
+        return register(self, run_id, agent_name, invocation)
+
+    with patch.object(
+        _LlamaIndexInvocation, "register_workflow_invocation", capture
+    ):
+        with pytest.raises(RuntimeError, match="llm failed"):
+            await workflow.run(user_msg="Use echo")
+
+    assert registries, "no member invocation was ever registered"
+    for parent in registries:
+        assert parent._workflow_invocations_by_key == {}
+        assert parent._workflow_invocations_by_run_id == {}
+
+    agent_span = _spans_named(span_exporter, "invoke_agent failing-agent")[0]
+    assert agent_span.status.status_code == StatusCode.ERROR

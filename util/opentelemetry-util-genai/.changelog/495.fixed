@@ -1,1 +1,1 @@
-Allow tool invocations to be created with an explicit parent span context.
+Stop logging a context-detach failure when an invocation is started and finished in different asyncio tasks or threads.
