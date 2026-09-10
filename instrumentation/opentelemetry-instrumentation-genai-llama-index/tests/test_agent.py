@@ -6,6 +6,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+from collections.abc import ValuesView
 from typing import Any, cast
 from unittest.mock import patch
 from uuid import UUID
@@ -1720,10 +1721,10 @@ def test_open_span_lookup_holds_the_handler_lock() -> None:
         handler=TelemetryHandler(tracer_provider=TracerProvider())
     )
 
-    class _RecordingSpans(dict):
+    class _RecordingSpans(dict[str, _LlamaIndexInvocation]):
         locked_during_iteration: bool | None = None
 
-        def values(self):  # type: ignore[override]
+        def values(self) -> ValuesView[_LlamaIndexInvocation]:
             self.locked_during_iteration = handler.lock.locked()
             return super().values()
 

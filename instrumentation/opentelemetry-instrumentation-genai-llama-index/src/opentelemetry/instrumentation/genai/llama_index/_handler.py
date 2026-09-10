@@ -1042,7 +1042,11 @@ class LlamaIndexSpanHandler(BaseSpanHandler[_LlamaIndexInvocation]):
         if parent is not None:
             parent.remove_workflow_invocation(invocation)
 
-    def _finish_workflow_tool(self, span: _LlamaIndexInvocation) -> None:
+    def _finish_workflow_tool(
+        self,
+        span: _LlamaIndexInvocation,
+        handoff_succeeded: bool = True,
+    ) -> None:
         """Release one tool of a member agent's turn and close the agent last.
 
         AgentWorkflow reports a handoff as a tool call made by the agent that is
@@ -1057,7 +1061,11 @@ class LlamaIndexSpanHandler(BaseSpanHandler[_LlamaIndexInvocation]):
         if parent is None:
             return
         invocation = span._workflow_agent_invocation
-        if span._workflow_handoff and invocation is not None:
+        if (
+            handoff_succeeded
+            and span._workflow_handoff
+            and invocation is not None
+        ):
             parent.set_pending_handoff(run_id, invocation)
         if not parent.release_workflow_tool(run_id):
             return
@@ -1140,7 +1148,7 @@ class LlamaIndexSpanHandler(BaseSpanHandler[_LlamaIndexInvocation]):
                     )
                     span._invocation.fail(error)
                     span.reset_tool_parent_context()
-                    self._finish_workflow_tool(span)
+                    self._finish_workflow_tool(span, handoff_succeeded=False)
                     return span
         span._invocation.stop()
         span.reset_tool_parent_context()
@@ -1179,5 +1187,5 @@ class LlamaIndexSpanHandler(BaseSpanHandler[_LlamaIndexInvocation]):
             span.reset_workflow_agent()
             self._release_workflow_invocation(span, span._invocation)
         elif isinstance(span._invocation, ToolInvocation):
-            self._finish_workflow_tool(span)
+            self._finish_workflow_tool(span, handoff_succeeded=err is None)
         return span
