@@ -913,6 +913,129 @@ async def test_agent_workflow_emits_span_hierarchy(
 
 
 @pytest.mark.asyncio
+async def test_agent_workflow_streaming_member_span_hierarchy(
+    span_exporter, instrument_llama_index
+) -> None:
+    agent = FunctionAgent(
+        name="streaming-workflow-agent",
+        llm=MockFunctionCallingLLM(
+            is_chat_model=True,
+            response_generator=lambda messages, **kwargs: ChatMessage(
+                role="assistant", content="streamed answer"
+            ),
+        ),
+        streaming=True,
+    )
+    workflow = AgentWorkflow(agents=[agent])
+
+    result = await workflow.run(user_msg="Answer by streaming")
+    assert result.response.content == "streamed answer"
+
+    workflow_span = _spans_named(
+        span_exporter, "invoke_workflow AgentWorkflow"
+    )[0]
+    agent_span = _spans_named(
+        span_exporter, "invoke_agent streaming-workflow-agent"
+    )[0]
+    assert agent_span.parent is not None
+    assert agent_span.parent.span_id == workflow_span.context.span_id
+    assert agent_span.context.trace_id == workflow_span.context.trace_id
+    assert workflow_span.status.status_code == StatusCode.UNSET
+    assert agent_span.status.status_code == StatusCode.UNSET
+
+
+@pytest.mark.asyncio
+async def test_agent_workflow_streaming_member_error_finalization(
+    span_exporter, instrument_llama_index
+) -> None:
+    error = ConnectionError("workflow stream disconnected")
+
+    async def response_stream():
+        yield ChatResponse(
+            message=ChatMessage(role="assistant", content="partial response")
+        )
+        raise error
+
+    async def failing_stream(*args, **kwargs):
+        return response_stream()
+
+    agent = ReActAgent(
+        name="streaming-react-workflow-agent",
+        llm=MockFunctionCallingLLM(is_chat_model=True),
+        streaming=True,
+    )
+    workflow = AgentWorkflow(agents=[agent])
+
+    with patch.object(
+        MockFunctionCallingLLM, "astream_chat", side_effect=failing_stream
+    ):
+        with pytest.raises(ConnectionError) as exc_info:
+            await workflow.run(user_msg="Answer by streaming")
+
+    assert exc_info.value is error
+    workflow_span = _spans_named(
+        span_exporter, "invoke_workflow AgentWorkflow"
+    )[0]
+    agent_span = _spans_named(
+        span_exporter, "invoke_agent streaming-react-workflow-agent"
+    )[0]
+    assert workflow_span.status.status_code == StatusCode.ERROR
+    assert agent_span.status.status_code == StatusCode.ERROR
+    _assert_error_type(workflow_span, "ConnectionError")
+    _assert_error_type(agent_span, "ConnectionError")
+
+
+@pytest.mark.asyncio
+async def test_agent_workflow_captures_early_stopping_response(
+    span_exporter, instrument_llama_index_with_content
+) -> None:
+    responses = iter(
+        [
+            ChatMessage(
+                role="assistant",
+                blocks=[
+                    ToolCallBlock(
+                        tool_call_id="echo-call",
+                        tool_name="echo",
+                        tool_kwargs={"value": "partial"},
+                    )
+                ],
+            ),
+            ChatMessage(role="assistant", content="generated answer"),
+        ]
+    )
+
+    agent = FunctionAgent(
+        name="early-stopping-agent",
+        llm=MockFunctionCallingLLM(
+            is_chat_model=True,
+            response_generator=lambda messages, **kwargs: next(responses),
+        ),
+        tools=[FunctionTool.from_defaults(lambda value: value, name="echo")],
+        streaming=False,
+        early_stopping_method="generate",
+    )
+    workflow = AgentWorkflow(agents=[agent])
+
+    result = await workflow.run(
+        user_msg="Answer this",
+        max_iterations=1,
+        early_stopping_method="generate",
+    )
+    assert result.response.content == "generated answer"
+
+    agent_span = _spans_named(
+        span_exporter, "invoke_agent early-stopping-agent"
+    )[0]
+    agent_output = json.loads(
+        agent_span.attributes[GenAIAttributes.GEN_AI_OUTPUT_MESSAGES]
+    )
+    assert agent_output[0]["parts"] == [
+        {"type": "text", "content": "generated answer"}
+    ]
+
+
+@pytest.mark.asyncio
 async def test_agent_workflow_captures_first_arriving_return_direct_result(
     span_exporter, instrument_llama_index_with_content
 ) -> None:

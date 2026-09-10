@@ -707,9 +707,24 @@ class _LlamaIndexInvocation(BaseSpan):
             self._workflow_agent_context_token = None
 
     def finalize_workflow_agents(
-        self, error: BaseException | None = None
+        self,
+        error: BaseException | None = None,
+        result: Any | None = None,
     ) -> None:
         """Finish member-agent spans left open when the workflow terminates."""
+        if error is None and isinstance(
+            (output := getattr(result, "result", None)), AgentOutput
+        ):
+            # ``early_stopping_method="generate"`` creates the final response
+            # in ``parse_agent_output`` rather than another agent step.
+            agent_name = output.current_agent_name
+            for (
+                _,
+                name,
+            ), invocation in self._workflow_invocations_by_key.items():
+                if name == agent_name:
+                    _set_agent_step_output(invocation, output)
+                    break
         invocations: list[AgentInvocation] = []
         for candidate in self._workflow_invocations_by_key.values():
             if all(candidate is not existing for existing in invocations):
@@ -1068,9 +1083,12 @@ class LlamaIndexSpanHandler(BaseSpanHandler[_LlamaIndexInvocation]):
         if span is None:
             return None
         if isinstance(span._invocation, WorkflowInvocation):
-            if self._handler.should_capture_content():
+            capture_content = self._handler.should_capture_content()
+            if capture_content:
                 _set_workflow_output(span._invocation, result)
-            span.finalize_workflow_agents()
+            span.finalize_workflow_agents(
+                result=result if capture_content else None
+            )
         elif isinstance(span._invocation, AgentInvocation):
             span.reset_tool_attributes()
             span.reset_workflow_tool()
