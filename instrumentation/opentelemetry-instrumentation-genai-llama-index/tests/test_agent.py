@@ -913,59 +913,6 @@ async def test_agent_workflow_emits_span_hierarchy(
 
 
 @pytest.mark.asyncio
-async def test_agent_workflow_captures_first_return_direct_result(
-    span_exporter, instrument_llama_index_with_content
-) -> None:
-    def first() -> str:
-        return "FIRST"
-
-    def second() -> str:
-        return "SECOND"
-
-    def response_generator(messages, **kwargs):
-        return ChatMessage(
-            role="assistant",
-            blocks=[
-                ToolCallBlock(
-                    tool_call_id="first-call",
-                    tool_name="first",
-                    tool_kwargs={},
-                ),
-                ToolCallBlock(
-                    tool_call_id="second-call",
-                    tool_name="second",
-                    tool_kwargs={},
-                ),
-            ],
-        )
-
-    agent = FunctionAgent(
-        name="return-direct-agent",
-        llm=MockFunctionCallingLLM(
-            is_chat_model=True,
-            response_generator=response_generator,
-        ),
-        tools=[
-            FunctionTool.from_defaults(first, return_direct=True),
-            FunctionTool.from_defaults(second, return_direct=True),
-        ],
-        streaming=False,
-    )
-    workflow = AgentWorkflow(agents=[agent])
-
-    result = await workflow.run(user_msg="Call both tools")
-    assert result.response.content == "FIRST"
-
-    agent_span = _spans_named(
-        span_exporter, "invoke_agent return-direct-agent"
-    )[0]
-    agent_output = json.loads(
-        agent_span.attributes[GenAIAttributes.GEN_AI_OUTPUT_MESSAGES]
-    )
-    assert agent_output[0]["parts"] == [{"type": "text", "content": "FIRST"}]
-
-
-@pytest.mark.asyncio
 async def test_agent_workflow_captures_first_arriving_return_direct_result(
     span_exporter, instrument_llama_index_with_content
 ) -> None:
