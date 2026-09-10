@@ -956,10 +956,8 @@ class LlamaIndexSpanHandler(BaseSpanHandler[_LlamaIndexInvocation]):
             parent = self.open_spans.get(parent_span_id or "")
             # LlamaIndex reports an agent tool execution through both call_tool
             # and the nested FunctionTool.call/acall; the parent records it.
-            if (
-                parent is not None
-                and parent._workflow_agent_invocation is not None
-                and isinstance(parent._invocation, ToolInvocation)
+            if parent is not None and isinstance(
+                parent._invocation, ToolInvocation
             ):
                 # The workflow callback identifies the tool by name only; the
                 # nested FunctionTool call is the authoritative executing tool.
