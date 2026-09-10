@@ -521,6 +521,7 @@ class _LlamaIndexInvocation(BaseSpan):
     _workflow_run_id: str | None = PrivateAttr()
     _workflow_tool_counts: dict[str, int] = PrivateAttr()
     _workflow_return_direct_runs: set[str] = PrivateAttr()
+    _workflow_tool_errors: dict[str, BaseException] = PrivateAttr()
     _workflow_pending_handoffs: dict[str, AgentInvocation] = PrivateAttr()
 
     def __init__(
@@ -558,6 +559,7 @@ class _LlamaIndexInvocation(BaseSpan):
         self._tool_parent_context_token = tool_parent_context_token
         self._workflow_tool_counts = {}
         self._workflow_return_direct_runs = set()
+        self._workflow_tool_errors = {}
         self._workflow_pending_handoffs = {}
         if workflow_run_id is not None and workflow_agent is not None:
             self.register_workflow_agent(workflow_run_id, workflow_agent)
@@ -655,9 +657,11 @@ class _LlamaIndexInvocation(BaseSpan):
         if count:
             self._workflow_tool_counts[run_id] = count
             self._workflow_return_direct_runs.discard(run_id)
+            self._workflow_tool_errors.pop(run_id, None)
         else:
             self._workflow_tool_counts.pop(run_id, None)
             self._workflow_return_direct_runs.discard(run_id)
+            self._workflow_tool_errors.pop(run_id, None)
 
     def set_return_direct_agent_output(
         self,
@@ -670,6 +674,16 @@ class _LlamaIndexInvocation(BaseSpan):
             return
         self._workflow_return_direct_runs.add(run_id)
         _set_return_direct_agent_output(invocation, tool_output)
+
+    def record_workflow_tool_error(
+        self, run_id: str, error: BaseException
+    ) -> None:
+        """Preserve the first failure across a concurrent tool turn."""
+        self._workflow_tool_errors.setdefault(run_id, error)
+
+    def take_workflow_tool_error(self, run_id: str) -> BaseException | None:
+        """Return and clear the failure recorded for a completed tool turn."""
+        return self._workflow_tool_errors.pop(run_id, None)
 
     def release_workflow_tool(self, run_id: str | None) -> bool:
         """Release one completed tool and report whether the turn is drained."""
@@ -1046,6 +1060,7 @@ class LlamaIndexSpanHandler(BaseSpanHandler[_LlamaIndexInvocation]):
         self,
         span: _LlamaIndexInvocation,
         handoff_succeeded: bool = True,
+        error: BaseException | None = None,
     ) -> None:
         """Release one tool of a member agent's turn and close the agent last.
 
@@ -1060,6 +1075,8 @@ class LlamaIndexSpanHandler(BaseSpanHandler[_LlamaIndexInvocation]):
         parent = self.open_spans.get(span.parent_id or "")
         if parent is None:
             return
+        if error is not None:
+            parent.record_workflow_tool_error(run_id, error)
         invocation = span._workflow_agent_invocation
         if (
             handoff_succeeded
@@ -1071,8 +1088,12 @@ class LlamaIndexSpanHandler(BaseSpanHandler[_LlamaIndexInvocation]):
             return
         pending = parent.take_pending_handoff(run_id)
         if pending is not None:
-            _finish_member_agent(pending)
+            _finish_member_agent(
+                pending, parent.take_workflow_tool_error(run_id)
+            )
             parent.remove_workflow_invocation(pending)
+        else:
+            parent.take_workflow_tool_error(run_id)
 
     def prepare_to_exit_span(
         self,
@@ -1148,7 +1169,11 @@ class LlamaIndexSpanHandler(BaseSpanHandler[_LlamaIndexInvocation]):
                     )
                     span._invocation.fail(error)
                     span.reset_tool_parent_context()
-                    self._finish_workflow_tool(span, handoff_succeeded=False)
+                    self._finish_workflow_tool(
+                        span,
+                        handoff_succeeded=False,
+                        error=error,
+                    )
                     return span
         span._invocation.stop()
         span.reset_tool_parent_context()
@@ -1187,5 +1212,9 @@ class LlamaIndexSpanHandler(BaseSpanHandler[_LlamaIndexInvocation]):
             span.reset_workflow_agent()
             self._release_workflow_invocation(span, span._invocation)
         elif isinstance(span._invocation, ToolInvocation):
-            self._finish_workflow_tool(span, handoff_succeeded=err is None)
+            self._finish_workflow_tool(
+                span,
+                handoff_succeeded=err is None,
+                error=err,
+            )
         return span
