@@ -957,6 +957,7 @@ class LlamaIndexSpanHandler(BaseSpanHandler[_LlamaIndexInvocation]):
                 tool_invocation = self._handler.tool(
                     tool_call.tool_name,
                     tool_type=tool_type,
+                    agent_name=getattr(active_invocation, "_agent_name", None),
                 )
             except BaseException:
                 if agent_context_token is not None:
