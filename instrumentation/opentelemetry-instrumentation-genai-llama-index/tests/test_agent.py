@@ -4,7 +4,8 @@
 from __future__ import annotations
 
 import json
-from typing import Any
+import logging
+from typing import Any, cast
 from unittest.mock import patch
 from uuid import UUID
 
@@ -36,6 +37,7 @@ from llama_index.core.workflow.errors import WorkflowRuntimeError
 from openai import RateLimitError
 
 from opentelemetry.instrumentation.genai.llama_index._handler import (
+    LlamaIndexSpanHandler,
     _agent_input,
     _input_message,
     _LlamaIndexInvocation,
@@ -44,7 +46,7 @@ from opentelemetry.instrumentation.genai.llama_index._handler import (
     _set_agent_output,
     _tool_definition,
 )
-from opentelemetry.sdk.trace import ReadableSpan
+from opentelemetry.sdk.trace import ReadableSpan, TracerProvider
 from opentelemetry.semconv._incubating.attributes import (
     gen_ai_attributes as GenAIAttributes,
 )
@@ -52,6 +54,7 @@ from opentelemetry.semconv.attributes import (
     error_attributes as ErrorAttributes,
 )
 from opentelemetry.trace import SpanKind, StatusCode
+from opentelemetry.util.genai.handler import TelemetryHandler
 from opentelemetry.util.genai.types import (
     BlobPart,
     GenericToolDefinition,
@@ -1336,3 +1339,218 @@ async def test_agent_workflow_releases_member_invocation_on_failure(
 
     agent_span = _spans_named(span_exporter, "invoke_agent failing-agent")[0]
     assert agent_span.status.status_code == StatusCode.ERROR
+
+
+@pytest.mark.asyncio
+async def test_agent_workflow_handoff_turn_contains_its_sibling_tools(
+    span_exporter, instrument_llama_index
+) -> None:
+    """A turn may request a handoff alongside other tools; all nest in the agent."""
+
+    def handoff_and_echo(to_agent: str):
+        def _generate(messages, **kwargs):
+            return ChatMessage(
+                role="assistant",
+                blocks=[
+                    ToolCallBlock(
+                        tool_call_id=f"handoff-{to_agent}",
+                        tool_name="handoff",
+                        tool_kwargs={"to_agent": to_agent, "reason": "next"},
+                    ),
+                    ToolCallBlock(
+                        tool_call_id="echo-1",
+                        tool_name="echo",
+                        tool_kwargs={"value": "hi"},
+                    ),
+                ],
+            )
+
+        return _generate
+
+    def only_handoff(to_agent: str):
+        def _generate(messages, **kwargs):
+            return ChatMessage(
+                role="assistant",
+                blocks=[
+                    ToolCallBlock(
+                        tool_call_id=f"handoff-{to_agent}",
+                        tool_name="handoff",
+                        tool_kwargs={"to_agent": to_agent, "reason": "next"},
+                    )
+                ],
+            )
+
+        return _generate
+
+    first = FunctionAgent(
+        name="first",
+        description="Hands off and echoes.",
+        can_handoff_to=["second"],
+        llm=MockFunctionCallingLLM(
+            is_chat_model=True, response_generator=handoff_and_echo("second")
+        ),
+        tools=[
+            FunctionTool.from_defaults(
+                lambda value: value, name="echo", description="Echoes."
+            )
+        ],
+        streaming=False,
+    )
+    second = FunctionAgent(
+        name="second",
+        description="Hands off again.",
+        can_handoff_to=["third"],
+        llm=MockFunctionCallingLLM(
+            is_chat_model=True, response_generator=only_handoff("third")
+        ),
+        streaming=False,
+    )
+    third = FunctionAgent(
+        name="third",
+        description="Answers.",
+        llm=MockFunctionCallingLLM(
+            is_chat_model=True,
+            response_generator=lambda messages, **kwargs: ChatMessage(
+                role="assistant", content="done"
+            ),
+        ),
+        streaming=False,
+    )
+    workflow = AgentWorkflow(agents=[first, second, third], root_agent="first")
+
+    await workflow.run(user_msg="Start")
+
+    first_span = _spans_named(span_exporter, "invoke_agent first")[0]
+    second_span = _spans_named(span_exporter, "invoke_agent second")[0]
+    third_span = _spans_named(span_exporter, "invoke_agent third")[0]
+    echo_span = _spans_named(span_exporter, "execute_tool echo")[0]
+
+    # The sibling tool belongs to the agent that requested it, not the workflow.
+    assert echo_span.parent is not None
+    assert echo_span.parent.span_id == first_span.context.span_id
+    assert echo_span.start_time >= first_span.start_time
+    assert echo_span.end_time <= first_span.end_time
+
+    # Each member closes before the next one starts.
+    assert first_span.end_time <= second_span.start_time
+    assert second_span.end_time <= third_span.start_time
+
+
+@pytest.mark.asyncio
+async def test_agent_workflow_does_not_log_context_detach_failures(
+    span_exporter, instrument_llama_index
+) -> None:
+    """Member-agent spans outlive the task that opened them.
+
+    ``TelemetryHandler`` attaches the span to the context that was current when
+    the invocation started, and that attachment can only be undone from the same
+    context. Finishing from a later step's task would make
+    ``opentelemetry.context.detach`` raise, which it logs with a traceback.
+    """
+
+    class _DetachFailures(logging.Handler):
+        def __init__(self) -> None:
+            super().__init__()
+            self.records: list[logging.LogRecord] = []
+
+        def emit(self, record: logging.LogRecord) -> None:
+            if "Failed to detach context" in record.getMessage():
+                self.records.append(record)
+
+    def handoff_then_answer(to_agent: str):
+        def _generate(messages, **kwargs):
+            if any(message.role.value == "tool" for message in messages):
+                return ChatMessage(role="assistant", content="done")
+            return ChatMessage(
+                role="assistant",
+                blocks=[
+                    ToolCallBlock(
+                        tool_call_id="handoff-1",
+                        tool_name="handoff",
+                        tool_kwargs={"to_agent": to_agent, "reason": "next"},
+                    )
+                ],
+            )
+
+        return _generate
+
+    router = FunctionAgent(
+        name="router",
+        description="Routes.",
+        can_handoff_to=["worker"],
+        llm=MockFunctionCallingLLM(
+            is_chat_model=True,
+            response_generator=handoff_then_answer("worker"),
+        ),
+        streaming=False,
+    )
+    worker = FunctionAgent(
+        name="worker",
+        description="Answers using a tool.",
+        llm=MockFunctionCallingLLM(
+            is_chat_model=True,
+            response_generator=_tool_then_answer("echo", "hello"),
+        ),
+        tools=[
+            FunctionTool.from_defaults(
+                lambda value: value, name="echo", description="Echoes."
+            )
+        ],
+        streaming=False,
+    )
+    workflow = AgentWorkflow(agents=[router, worker], root_agent="router")
+
+    failures = _DetachFailures()
+    context_logger = logging.getLogger("opentelemetry.context")
+    context_logger.addHandler(failures)
+    try:
+        await workflow.run(user_msg="Start")
+    finally:
+        context_logger.removeHandler(failures)
+
+    assert [record.getMessage() for record in failures.records] == []
+    # The spans the cross-task finishes produce are still correct.
+    assert len(_spans_named(span_exporter, "invoke_agent router")) == 1
+    assert len(_spans_named(span_exporter, "invoke_agent worker")) == 1
+
+
+def _tool_then_answer(tool_name: str, value: str):
+    def _generate(messages, **kwargs):
+        if any(message.role.value == "tool" for message in messages):
+            return ChatMessage(role="assistant", content="done")
+        return ChatMessage(
+            role="assistant",
+            blocks=[
+                ToolCallBlock(
+                    tool_call_id="tool-1",
+                    tool_name=tool_name,
+                    tool_kwargs={"value": value},
+                )
+            ],
+        )
+
+    return _generate
+
+
+def test_open_span_lookup_holds_the_handler_lock() -> None:
+    """``open_spans`` is mutated under the lock from LlamaIndex worker threads.
+
+    Iterating it unguarded raises ``RuntimeError: dictionary changed size during
+    iteration``, which the dispatcher swallows -- losing the tool span silently.
+    """
+    handler = LlamaIndexSpanHandler(
+        handler=TelemetryHandler(tracer_provider=TracerProvider())
+    )
+
+    class _RecordingSpans(dict):
+        locked_during_iteration: bool | None = None
+
+        def values(self):  # type: ignore[override]
+            self.locked_during_iteration = handler.lock.locked()
+            return super().values()
+
+    handler.open_spans = _RecordingSpans()
+
+    assert handler._is_open_tool(cast(Any, object())) is False
+    assert handler.open_spans.locked_during_iteration is True
+    assert handler.lock.locked() is False

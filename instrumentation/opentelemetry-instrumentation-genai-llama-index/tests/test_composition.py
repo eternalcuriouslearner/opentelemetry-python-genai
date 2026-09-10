@@ -179,3 +179,54 @@ async def test_agent_and_inference_provider_errors_compose(
     assert inference_span.context.trace_id == agent_span.context.trace_id
     assert inference_span.parent is not None
     assert inference_span.parent.span_id == agent_span.context.span_id
+
+
+@pytest.mark.asyncio
+async def test_standalone_agent_nests_provider_inference(
+    span_exporter,
+    tracer_provider,
+    logger_provider,
+    meter_provider,
+    openai_llm,
+    vcr,
+) -> None:
+    """A provider chat span nests under a standalone agent, not just a member.
+
+    ``BaseWorkflowAgent.run`` takes a different path through the span handler
+    than an ``AgentWorkflow`` member step, so both need their own coverage.
+    """
+    OpenAIInstrumentor = pytest.importorskip(
+        "opentelemetry.instrumentation.genai.openai"
+    ).OpenAIInstrumentor
+
+    agent = FunctionAgent(
+        name="standalone-agent",
+        llm=openai_llm,
+        streaming=False,
+    )
+    providers = {
+        "tracer_provider": tracer_provider,
+        "logger_provider": logger_provider,
+        "meter_provider": meter_provider,
+    }
+    with instrument(LlamaIndexInstrumentor(), **providers):
+        with instrument(OpenAIInstrumentor(), **providers):
+            with vcr.use_cassette("inference.yaml"):
+                await agent.run(user_msg="Hello!")
+
+    spans = span_exporter.get_finished_spans()
+    operations = [
+        span.attributes[GenAIAttributes.GEN_AI_OPERATION_NAME]
+        for span in spans
+    ]
+    # A standalone run emits no workflow span.
+    assert operations.count("invoke_workflow") == 0
+    assert operations.count("invoke_agent") == 1
+
+    spans_by_name = {span.name: span for span in spans}
+    agent_span = spans_by_name["invoke_agent standalone-agent"]
+    inference_span = spans_by_name["chat gpt-4o-mini"]
+
+    assert inference_span.context.trace_id == agent_span.context.trace_id
+    assert inference_span.parent is not None
+    assert inference_span.parent.span_id == agent_span.context.span_id

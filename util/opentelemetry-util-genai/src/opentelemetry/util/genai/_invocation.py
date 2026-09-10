@@ -3,8 +3,6 @@
 
 from __future__ import annotations
 
-import asyncio
-import threading
 import timeit
 from abc import abstractmethod
 from collections.abc import Sequence
@@ -50,21 +48,6 @@ if TYPE_CHECKING:
 
 
 ContextToken: TypeAlias = Token[Context]
-
-
-def _execution_slot() -> tuple[int, int | None]:
-    """Identify the thread and asyncio task that a context token belongs to.
-
-    A ``contextvars.Token`` can only be reset from the context that created it.
-    Both a new thread and a new asyncio task get their own context -- and a task
-    copies its parent's context, so the ``Context`` object alone does not
-    identify the owner.
-    """
-    try:
-        task = asyncio.current_task()
-    except RuntimeError:
-        task = None
-    return (threading.get_ident(), id(task) if task is not None else None)
 
 
 class GenAIInvocation(AbstractContextManager["GenAIInvocation"]):
@@ -117,7 +100,6 @@ class GenAIInvocation(AbstractContextManager["GenAIInvocation"]):
         self._span_name: str = span_name
         self._span_kind: SpanKind = span_kind
         self._context_token: ContextToken | None = None
-        self._context_slot: tuple[int, int | None] | None = None
         self._monotonic_start_s: float
         # Streaming state, set when the invocation is handed to a stream
         # wrapper. ``_request_stream`` marks the request as streamed
@@ -159,7 +141,6 @@ class GenAIInvocation(AbstractContextManager["GenAIInvocation"]):
         self._span_context = set_span_in_context(self.span)
         self._monotonic_start_s = timeit.default_timer()
         self._context_token = attach(self._span_context)
-        self._context_slot = _execution_slot()
 
     def _get_metric_attributes(self) -> dict[str, AttributeValue]:
         """Return low-cardinality attributes for metric recording."""
@@ -254,13 +235,10 @@ class GenAIInvocation(AbstractContextManager["GenAIInvocation"]):
         try:
             self._apply_finish(error)
         finally:
-            # An invocation can outlive the execution context that started
-            # it: frameworks that run each step as its own asyncio task copy
-            # the context, so a token created in one task cannot be reset from
-            # another. Detaching anyway raises inside detach(), which logs the
-            # failure with a traceback on every such finish.
-            if self._context_slot == _execution_slot():
+            try:
                 detach(context_token)
+            except Exception:  # pylint: disable=broad-except
+                pass
             self.span.end()
 
     def stop(self) -> None:
