@@ -283,6 +283,10 @@ class OpenTelemetryLangChainCallbackHandler(BaseCallbackHandler):
                 request_model = str(model)
                 break
 
+        if request_model is None and metadata:
+            if model := metadata.get("ls_model_name"):
+                request_model = str(model)
+
         # Skip telemetry for unsupported request models
         if request_model is None:
             return
