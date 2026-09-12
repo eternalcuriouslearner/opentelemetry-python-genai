@@ -4,11 +4,16 @@
 from __future__ import annotations
 
 import json
+from typing import cast
 
 import pytest
 from llama_index.core.base.base_retriever import BaseRetriever
 from llama_index.core.schema import NodeWithScore, QueryBundle, TextNode
 
+from opentelemetry.instrumentation.genai.llama_index._handler import (
+    _retrieval_documents,
+    _retrieval_top_k,
+)
 from opentelemetry.semconv._incubating.attributes import (
     gen_ai_attributes as GenAIAttributes,
 )
@@ -18,6 +23,20 @@ from opentelemetry.semconv.attributes import (
 from opentelemetry.trace import SpanKind, StatusCode
 
 _GEN_AI_RETRIEVAL_TOP_K = "gen_ai.retrieval.top_k"
+
+
+def test_unconvertible_retrieval_results_are_omitted() -> None:
+    assert _retrieval_documents([]) == []
+    assert _retrieval_documents([object()]) is None
+
+
+def test_similarity_top_k_getter_failure_is_ignored() -> None:
+    class _FailingRetriever:
+        @property
+        def similarity_top_k(self) -> int:
+            raise KeyboardInterrupt
+
+    assert _retrieval_top_k(cast(BaseRetriever, _FailingRetriever())) is None
 
 
 class _Retriever(BaseRetriever):

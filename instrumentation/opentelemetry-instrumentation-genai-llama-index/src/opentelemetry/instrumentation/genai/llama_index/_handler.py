@@ -315,7 +315,7 @@ def _retrieval_top_k(retriever: BaseRetriever) -> int | None:
     """Read the common top-k setting without requiring a retriever subtype."""
     try:
         top_k = getattr(retriever, "similarity_top_k", None)
-    except Exception:
+    except BaseException:
         return None
     if isinstance(top_k, int) and not isinstance(top_k, bool):
         return top_k
@@ -342,7 +342,11 @@ def _retrieval_documents(
             documents.append(document)
         except BaseException:
             continue
-    return documents
+    # Preserve [] for a genuine empty result, but omit the attribute when a
+    # non-empty result could not be converted into semantic-convention docs.
+    if documents:
+        return documents
+    return [] if len(result) == 0 else None
 
 
 def _tool_attributes(
