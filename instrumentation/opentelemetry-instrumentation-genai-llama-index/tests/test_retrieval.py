@@ -12,7 +12,9 @@ from llama_index.core.schema import NodeWithScore, QueryBundle, TextNode
 from opentelemetry.semconv._incubating.attributes import (
     gen_ai_attributes as GenAIAttributes,
 )
-from opentelemetry.semconv.attributes import error_attributes as ErrorAttributes
+from opentelemetry.semconv.attributes import (
+    error_attributes as ErrorAttributes,
+)
 from opentelemetry.trace import SpanKind, StatusCode
 
 _GEN_AI_RETRIEVAL_TOP_K = "gen_ai.retrieval.top_k"
@@ -36,9 +38,7 @@ class _Retriever(BaseRetriever):
 
 
 def _span(exporter):
-    spans = [
-        s for s in exporter.get_finished_spans() if s.name == "retrieval"
-    ]
+    spans = [s for s in exporter.get_finished_spans() if s.name == "retrieval"]
     assert len(spans) == 1
     return spans[0]
 
@@ -96,9 +96,12 @@ async def test_async_retrieval_captures_query_and_documents(
     assert span.attributes[GenAIAttributes.GEN_AI_RETRIEVAL_QUERY_TEXT] == (
         "Where is Paris?"
     )
-    assert json.loads(
-        span.attributes[GenAIAttributes.GEN_AI_RETRIEVAL_DOCUMENTS]
-    )[0]["content"] == "Paris is in France."
+    assert (
+        json.loads(
+            span.attributes[GenAIAttributes.GEN_AI_RETRIEVAL_DOCUMENTS]
+        )[0]["content"]
+        == "Paris is in France."
+    )
 
 
 def test_sync_retrieval_error_is_unchanged(

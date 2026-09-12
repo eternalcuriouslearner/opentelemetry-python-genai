@@ -14,7 +14,10 @@ from opentelemetry.instrumentation.genai.llama_index import (
 from opentelemetry.sdk._logs import LoggerProvider
 from opentelemetry.sdk.metrics import MeterProvider
 from opentelemetry.sdk.trace import TracerProvider
-from opentelemetry.test_util_genai.conformance import ExpectedViolation, Scenario
+from opentelemetry.test_util_genai.conformance import (
+    ExpectedViolation,
+    Scenario,
+)
 from opentelemetry.test_util_genai.instrumentor import instrument
 
 
@@ -60,6 +63,4 @@ class RetrievalScenario(Scenario):
             meter_provider=meter_provider,
             content_capture="SPAN_ONLY",
         ):
-            _ConformanceRetriever().retrieve(
-                "What is the capital of France?"
-            )
+            _ConformanceRetriever().retrieve("What is the capital of France?")

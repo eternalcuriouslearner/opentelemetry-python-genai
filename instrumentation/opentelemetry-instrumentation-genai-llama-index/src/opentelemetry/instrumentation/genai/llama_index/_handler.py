@@ -42,8 +42,8 @@ from opentelemetry.trace import set_span_in_context
 from opentelemetry.util.genai.handler import TelemetryHandler
 from opentelemetry.util.genai.invocation import (
     GenAIInvocation,
-    RetrievalInvocation,
     LocalAgentInvocation,
+    RetrievalInvocation,
     ToolInvocation,
     WorkflowInvocation,
 )
