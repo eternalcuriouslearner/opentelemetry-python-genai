@@ -328,8 +328,9 @@ def _retrieval_documents(
     """Convert retrieved LlamaIndex nodes to semconv document objects."""
     if not isinstance(result, Sequence):
         return None
+    candidates = cast(Sequence[object], result)
     documents: list[dict[str, Any]] = []
-    for candidate in cast(Sequence[object], result):
+    for candidate in candidates:
         if not isinstance(candidate, NodeWithScore):
             continue
         try:
@@ -346,7 +347,7 @@ def _retrieval_documents(
     # non-empty result could not be converted into semantic-convention docs.
     if documents:
         return documents
-    return [] if len(result) == 0 else None
+    return [] if len(candidates) == 0 else None
 
 
 def _tool_attributes(
