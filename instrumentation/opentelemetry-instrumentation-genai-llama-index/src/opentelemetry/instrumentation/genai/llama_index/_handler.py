@@ -55,7 +55,6 @@ from opentelemetry.util.genai.types import (
     MessagePart,
     OutputMessage,
     ReasoningPart,
-    RetrievalDocument,
     Role,
     SystemInstructionPart,
     TextPart,
@@ -325,16 +324,16 @@ def _retrieval_top_k(retriever: BaseRetriever) -> int | None:
 
 def _retrieval_documents(
     result: object,
-) -> list[RetrievalDocument] | None:
+) -> list[dict[str, Any]] | None:
     """Convert retrieved LlamaIndex nodes to semconv document objects."""
     if not isinstance(result, Sequence):
         return None
-    documents: list[RetrievalDocument] = []
+    documents: list[dict[str, Any]] = []
     for candidate in cast(Sequence[object], result):
         if not isinstance(candidate, NodeWithScore):
             continue
         try:
-            document: RetrievalDocument = {
+            document: dict[str, Any] = {
                 "id": candidate.node_id,
                 "content": candidate.node.get_content(),
             }

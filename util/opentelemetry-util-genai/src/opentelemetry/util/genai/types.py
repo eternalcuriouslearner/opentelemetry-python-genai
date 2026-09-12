@@ -11,7 +11,6 @@ from typing import (
     Any,
     Literal,
     TypeAlias,
-    TypedDict,
     Union,
 )
 
@@ -45,19 +44,6 @@ class GenericPart:
     """
 
     type: str
-
-
-class RetrievalDocument(TypedDict, total=False):
-    """A document returned by a retrieval operation.
-
-    This model follows the GenAI retrieval document schema and is shared by
-    instrumentations so document attributes retain a consistent shape.
-    """
-
-    id: str
-    score: float
-    content: str
-    metadata: dict[str, object]
 
 
 @dataclass()
