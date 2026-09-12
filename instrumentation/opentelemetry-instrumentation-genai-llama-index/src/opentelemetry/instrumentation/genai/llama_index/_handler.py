@@ -340,7 +340,7 @@ def _retrieval_documents(
             if candidate.score is not None:
                 document["score"] = candidate.score
             documents.append(document)
-        except Exception:
+        except BaseException:
             continue
     return documents
 
