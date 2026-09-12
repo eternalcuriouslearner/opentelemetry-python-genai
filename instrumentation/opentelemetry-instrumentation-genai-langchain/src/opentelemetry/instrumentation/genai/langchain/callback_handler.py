@@ -173,7 +173,6 @@ class OpenTelemetryLangChainCallbackHandler(BaseCallbackHandler):
                         agent.input_messages = make_input_message(inputs)
 
                     if metadata:
-                        agent.agent_id = metadata.get("agent_id")
                         agent.agent_description = metadata.get(
                             "agent_description"
                         )
@@ -283,6 +282,10 @@ class OpenTelemetryLangChainCallbackHandler(BaseCallbackHandler):
             if (model := (metadata or {}).get(model_tag)) is not None:
                 request_model = str(model)
                 break
+
+        if request_model is None and metadata:
+            if model := metadata.get("ls_model_name"):
+                request_model = str(model)
 
         # Skip telemetry for unsupported request models
         if request_model is None:
