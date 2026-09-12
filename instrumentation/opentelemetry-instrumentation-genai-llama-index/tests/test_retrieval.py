@@ -71,13 +71,17 @@ def test_retrieval_captures_documents_and_query(
     assert (
         span.attributes[GenAIAttributes.GEN_AI_OPERATION_NAME] == "retrieval"
     )
-    assert span.attributes[_GEN_AI_RETRIEVAL_TOP_K] == 2
-    assert span.attributes[GenAIAttributes.GEN_AI_RETRIEVAL_QUERY_TEXT] == (
-        "Where is Paris?"
-    )
-    assert json.loads(
-        span.attributes[GenAIAttributes.GEN_AI_RETRIEVAL_DOCUMENTS]
-    ) == [{"id": "doc-1", "content": "Paris is in France.", "score": 0.9}]
+    top_k = span.attributes[_GEN_AI_RETRIEVAL_TOP_K]
+    query_text = span.attributes[GenAIAttributes.GEN_AI_RETRIEVAL_QUERY_TEXT]
+    documents = span.attributes[GenAIAttributes.GEN_AI_RETRIEVAL_DOCUMENTS]
+    assert type(top_k) is int
+    assert type(query_text) is str
+    assert type(documents) is str
+    assert top_k == 2
+    assert query_text == "Where is Paris?"
+    assert json.loads(documents) == [
+        {"id": "doc-1", "content": "Paris is in France.", "score": 0.9}
+    ]
 
 
 def test_retrieval_query_bundle_captures_query(
@@ -122,12 +126,14 @@ async def test_async_retrieval_captures_query_and_documents(
     result = await _Retriever().aretrieve("Where is Paris?")
     assert result[0].node_id == "doc-1"
     span = _span(span_exporter)
-    assert span.attributes[GenAIAttributes.GEN_AI_RETRIEVAL_QUERY_TEXT] == (
-        "Where is Paris?"
-    )
-    assert json.loads(
-        span.attributes[GenAIAttributes.GEN_AI_RETRIEVAL_DOCUMENTS]
-    ) == [{"id": "doc-1", "content": "Paris is in France.", "score": 0.9}]
+    query_text = span.attributes[GenAIAttributes.GEN_AI_RETRIEVAL_QUERY_TEXT]
+    documents = span.attributes[GenAIAttributes.GEN_AI_RETRIEVAL_DOCUMENTS]
+    assert type(query_text) is str
+    assert type(documents) is str
+    assert query_text == "Where is Paris?"
+    assert json.loads(documents) == [
+        {"id": "doc-1", "content": "Paris is in France.", "score": 0.9}
+    ]
 
 
 def test_sync_retrieval_error_is_unchanged(
