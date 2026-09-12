@@ -336,7 +336,7 @@ def _retrieval_documents(
         try:
             document: RetrievalDocument = {
                 "id": candidate.node_id,
-                "content": candidate.get_content(),
+                "content": candidate.node.get_content(),
             }
             if candidate.score is not None:
                 document["score"] = candidate.score

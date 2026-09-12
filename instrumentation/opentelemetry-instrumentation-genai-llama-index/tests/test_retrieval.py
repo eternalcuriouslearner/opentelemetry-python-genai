@@ -96,12 +96,9 @@ async def test_async_retrieval_captures_query_and_documents(
     assert span.attributes[GenAIAttributes.GEN_AI_RETRIEVAL_QUERY_TEXT] == (
         "Where is Paris?"
     )
-    assert (
-        json.loads(
-            span.attributes[GenAIAttributes.GEN_AI_RETRIEVAL_DOCUMENTS]
-        )[0]["content"]
-        == "Paris is in France."
-    )
+    assert json.loads(
+        span.attributes[GenAIAttributes.GEN_AI_RETRIEVAL_DOCUMENTS]
+    ) == [{"id": "doc-1", "content": "Paris is in France.", "score": 0.9}]
 
 
 def test_sync_retrieval_error_is_unchanged(
