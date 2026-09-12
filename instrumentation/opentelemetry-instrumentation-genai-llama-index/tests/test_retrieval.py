@@ -61,6 +61,16 @@ def test_retrieval_captures_documents_and_query(
     ) == [{"id": "doc-1", "content": "Paris is in France.", "score": 0.9}]
 
 
+def test_retrieval_query_bundle_captures_query(
+    span_exporter, instrument_llama_index_with_content
+) -> None:
+    _Retriever().retrieve(QueryBundle(query_str="Where is Paris?"))
+    span = _span(span_exporter)
+    assert span.attributes[GenAIAttributes.GEN_AI_RETRIEVAL_QUERY_TEXT] == (
+        "Where is Paris?"
+    )
+
+
 def test_retrieval_omits_content_without_capture(
     span_exporter, instrument_llama_index
 ) -> None:
