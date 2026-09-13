@@ -313,10 +313,7 @@ def _retrieval_query(bound_args: inspect.BoundArguments) -> str | None:
 
 def _retrieval_top_k(retriever: BaseRetriever) -> int | None:
     """Read the common top-k setting without requiring a retriever subtype."""
-    try:
-        top_k = getattr(retriever, "similarity_top_k", None)
-    except BaseException:
-        return None
+    top_k = getattr(retriever, "similarity_top_k", None)
     if isinstance(top_k, int) and not isinstance(top_k, bool):
         return top_k
     return None
