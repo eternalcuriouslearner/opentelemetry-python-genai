@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import json
+
 import pytest
 from llama_index.core.base.base_retriever import BaseRetriever
 from llama_index.core.schema import NodeWithScore, QueryBundle, TextNode
