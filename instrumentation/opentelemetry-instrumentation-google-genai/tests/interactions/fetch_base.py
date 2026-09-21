@@ -14,16 +14,20 @@ from opentelemetry.semconv._incubating.attributes import (
 )
 
 from ..common.base import TestCase as CommonTestCaseBase
-from .base import _HAS_INTERACTIONS, AsyncInteractionsResource, InteractionsResource
+from .base import (
+    _HAS_INTERACTIONS,
+    AsyncInteractionsResource,
+    InteractionsResource,
+)
 from .util import (
     FakeAsyncStream,
     FakeStream,
+    create_mock_content_event,
     create_mock_error_event,
+    create_mock_fetched_interaction,
+    create_mock_sse_completed_event,
     create_mock_step_event,
     parse_sse_events,
-    create_mock_sse_completed_event,
-    create_mock_content_event,
-    create_mock_fetched_interaction,
 )
 
 _SPAN_NAME = "fetch_response"
@@ -239,9 +243,7 @@ class TestCase(CommonTestCaseBase):
                             "index": 0,
                             "step": {
                                 "type": "model_output",
-                                "content": [
-                                    {"type": "text", "text": "Hello"}
-                                ],
+                                "content": [{"type": "text", "text": "Hello"}],
                             },
                         },
                         {
@@ -357,7 +359,9 @@ class TestCase(CommonTestCaseBase):
                 interaction.steps = None
                 interaction.output_text = None
                 return [
-                    create_mock_step_event("step.start", 0, step_type="thought"),
+                    create_mock_step_event(
+                        "step.start", 0, step_type="thought"
+                    ),
                     create_mock_step_event("step.delta", 0, text=None),
                     create_mock_step_event(
                         "step.start", 1, step_type="model_output"
@@ -408,7 +412,9 @@ class TestCase(CommonTestCaseBase):
     ) -> None:
         raise NotImplementedError()
 
-    def run_streaming_fetch_closed_early(self, *args: Any, **kwargs: Any) -> Any:
+    def run_streaming_fetch_closed_early(
+        self, *args: Any, **kwargs: Any
+    ) -> Any:
         raise NotImplementedError()
 
     def drain_stream(self, *args: Any, **kwargs: Any) -> Any:
@@ -465,7 +471,9 @@ class TestCase(CommonTestCaseBase):
         self.assertEqual(
             span.attributes["gen_ai.response.model"], "gemini-2.5-pro"
         )
-        self.assertEqual(span.attributes["gen_ai.response.status"], "completed")
+        self.assertEqual(
+            span.attributes["gen_ai.response.status"], "completed"
+        )
         self.assertEqual(
             span.attributes["gen_ai.response.finish_reasons"], ("stop",)
         )
@@ -645,8 +653,12 @@ class TestCase(CommonTestCaseBase):
         self.assertEqual(events[1].interaction.id, "stream-id-1")
         span = self.otel.get_span_named(_SPAN_NAME)
         self.assertEqual(span.attributes["gen_ai.response.id"], "stream-id-1")
-        self.assertIs(span.attributes["gen_ai.request.stream"], True)
-        self.assertEqual(span.attributes["gen_ai.response.status"], "completed")
+        self.assertEqual(
+            span.attributes["gen_ai.response.status"], "completed"
+        )
+        # fetch_response has no gen_ai.request.stream attribute; only a resumed
+        # fetch is distinguished, by its cursor.
+        self.assertNotIn("gen_ai.request.stream", span.attributes)
         self.assertNotIn("gen_ai.request.stream_cursor", span.attributes)
 
     def test_resumed_streaming_fetch_records_cursor(self) -> None:
@@ -693,9 +705,7 @@ class TestCase(CommonTestCaseBase):
     def test_caller_side_error_records_error_and_closes_stream(self) -> None:
         self.configure_valid_fetch()
         with self.assertRaises(RuntimeError):
-            self.run_streaming_fetch_with_caller_error(
-                "abc-123", stream=True
-            )
+            self.run_streaming_fetch_with_caller_error("abc-123", stream=True)
         span = self.otel.get_span_named(_SPAN_NAME)
         self.assertEqual(span.attributes["error.type"], "RuntimeError")
         self.assertTrue(self._last_stream.closed)
@@ -728,9 +738,7 @@ class TestCase(CommonTestCaseBase):
         events = self.run_streaming_fetch("abc-123", stream=True)
         self.assertEqual(len(events), 2)
         span = self.otel.get_span_named(_SPAN_NAME)
-        self.assertEqual(
-            span.attributes["error.type"], "service_unavailable"
-        )
+        self.assertEqual(span.attributes["error.type"], "service_unavailable")
         # No completion event arrived, so nothing is known about the response.
         self.assertNotIn("gen_ai.response.status", span.attributes)
 
@@ -952,8 +960,6 @@ class TestCase(CommonTestCaseBase):
         self.configure_valid_fetch(interaction_id="closed-early")
         self.run_streaming_fetch_closed_early("closed-early", stream=True)
         span = self.otel.get_span_named(_SPAN_NAME)
-        self.assertEqual(
-            span.attributes["gen_ai.response.id"], "closed-early"
-        )
+        self.assertEqual(span.attributes["gen_ai.response.id"], "closed-early")
         self.assertNotIn("error.type", span.attributes)
         self.assertTrue(self._last_stream.closed)

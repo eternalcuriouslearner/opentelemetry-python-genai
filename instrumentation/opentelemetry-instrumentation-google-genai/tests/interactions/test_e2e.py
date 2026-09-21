@@ -478,7 +478,7 @@ def test_sync_interactions_get_streaming(
     interaction = completed[0].interaction
 
     span = _fetch_span(otel_mocker)
-    assert span.attributes["gen_ai.request.stream"] is True
+    assert "gen_ai.request.stream" not in span.attributes
     assert span.attributes["gen_ai.response.id"] == created.id
     # Proves the real SSE completion event is recognised and applied.
     assert span.attributes["gen_ai.response.status"] == interaction.status

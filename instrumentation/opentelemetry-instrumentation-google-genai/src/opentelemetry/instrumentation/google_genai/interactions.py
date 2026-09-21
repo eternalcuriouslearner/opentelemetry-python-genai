@@ -1316,10 +1316,11 @@ def _start_fetch_invocation(
         else GenAIAttributes.GenAiSystemValues.GEMINI.value
     )
     streaming = bool(kwargs.get("stream"))
+    # gen_ai.request.stream is not part of the fetch_response span's attributes;
+    # a resumed fetch is identified by gen_ai.request.stream_cursor instead.
     invocation = telemetry_handler.fetch_response(
         provider=provider,
         response_id=interaction_id,
-        request_stream=streaming or None,
         server_address=server_address,
         error_type_resolver=resolve_error_type,
     )
