@@ -417,6 +417,24 @@ def test_sync_interactions_get_with_streaming_response(
 
 
 @pytest.mark.vcr(match_on=_GET_MATCH_ON)
+@pytest.mark.asyncio
+async def test_async_interactions_get_with_streaming_response(
+    client, otel_mocker: OTelMocker, capture_content
+):
+    """The async context manager is a different shape again."""
+    async with client.aio.interactions.with_streaming_response.get(
+        _INTERACTION_ID
+    ) as response:
+        parsed = await response.parse()
+
+    assert parsed.id == _INTERACTION_ID
+
+    span = _fetch_span(otel_mocker)
+    assert span.attributes["gen_ai.response.id"] == _INTERACTION_ID
+    assert GenAIAttributes.GEN_AI_OUTPUT_MESSAGES not in span.attributes
+
+
+@pytest.mark.vcr(match_on=_GET_MATCH_ON)
 def test_sync_interactions_get_failed_status(client, otel_mocker: OTelMocker):
     """A failed *generation* is not a failed fetch.
 
@@ -436,22 +454,19 @@ def test_sync_interactions_get_failed_status(client, otel_mocker: OTelMocker):
 
 
 @pytest.mark.vcr(match_on=_GET_MATCH_ON)
-def test_sync_interactions_get_not_found(client, otel_mocker: OTelMocker):
+def test_sync_interactions_get_invalid_id(client, otel_mocker: OTelMocker):
+    # A malformed id is rejected as a bad request rather than a missing one.
     with pytest.raises(Exception) as exc_info:
         client.interactions.get("interaction-missing")
 
     span = otel_mocker.get_span_named("fetch_response")
     assert span is not None
     assert span.attributes["gen_ai.response.id"] == "interaction-missing"
-    # The interactions API raises from its own error hierarchy
-    # (google.genai._gaos.lib.compat_errors), unrelated to
-    # google.genai.errors.APIError, so resolve_error_type does not fire and the
-    # util falls back to the fully qualified class name rather than the HTTP
-    # status code that generate_content errors report.
-    exc_cls = type(exc_info.value)
-    assert span.attributes["error.type"] == (
-        f"{exc_cls.__module__}.{exc_cls.__qualname__}"
-    )
+    # The interactions API raises from its own error hierarchy, which carries
+    # the status as `status_code`; resolve_error_type reports it like it does
+    # for a generate_content error.
+    assert exc_info.value.status_code == 400
+    assert span.attributes["error.type"] == "400"
 
 
 @pytest.mark.vcr(match_on=_GET_MATCH_ON)

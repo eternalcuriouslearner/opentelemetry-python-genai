@@ -526,9 +526,11 @@ def _apply_fetched_interaction_attributes(
     invocation.response_status = _interaction_response_status(status)
     finish_reason = _interaction_finish_reason(status)
     invocation.finish_reasons = [finish_reason] if finish_reason else None
-    invocation.tool_definitions = _interaction_tool_definitions(response)
 
     if telemetry_handler.should_capture_content():
+        # gen_ai.tool.definitions is opt-in, so dumping the tools is wasted
+        # work unless content is being captured.
+        invocation.tool_definitions = _interaction_tool_definitions(response)
         messages = _interactions_response_to_messages(
             response, finish_reason=None
         )
@@ -569,7 +571,7 @@ class InteractionsStreamWrapper(SyncStreamWrapper[InteractionSSEEvent]):
             )
         self._self_invocation.stop()
 
-    def _on_stream_error(self, error: Exception) -> None:
+    def _on_stream_error(self, error: BaseException) -> None:
         self._self_invocation.fail(error)
 
 
@@ -601,7 +603,7 @@ class AsyncInteractionsStreamWrapper(AsyncStreamWrapper[InteractionSSEEvent]):
             )
         self._self_invocation.stop()
 
-    def _on_stream_error(self, error: Exception) -> None:
+    def _on_stream_error(self, error: BaseException) -> None:
         self._self_invocation.fail(error)
 
 
@@ -876,7 +878,7 @@ class FetchInteractionStreamWrapper(SyncStreamWrapper[InteractionSSEEvent]):
             return
         self._self_invocation.stop()
 
-    def _on_stream_error(self, error: Exception) -> None:
+    def _on_stream_error(self, error: BaseException) -> None:
         self._self_invocation.fail(error)
 
 
@@ -933,7 +935,7 @@ class AsyncFetchInteractionStreamWrapper(
             return
         self._self_invocation.stop()
 
-    def _on_stream_error(self, error: Exception) -> None:
+    def _on_stream_error(self, error: BaseException) -> None:
         self._self_invocation.fail(error)
 
 
