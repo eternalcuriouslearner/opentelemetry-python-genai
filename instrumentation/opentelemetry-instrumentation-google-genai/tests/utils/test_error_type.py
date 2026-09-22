@@ -40,8 +40,6 @@ def test_interactions_error_reports_its_status_code():
         request=httpx.Request("GET", "https://example.invalid/interactions/x"),
     )
     try:
-        raise NotFoundError(
-            "Error code: 404", response=response, body=None
-        )
-    except Exception as exc:  # noqa: BLE001
+        raise NotFoundError("Error code: 404", response=response, body=None)
+    except Exception as exc:
         assert resolve_error_type(exc) == "404"
