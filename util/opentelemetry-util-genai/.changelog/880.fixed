@@ -1,0 +1,1 @@
+Record the `gen_ai.client.operation.time_to_first_chunk` and `gen_ai.client.operation.time_per_output_chunk` metrics only for streamed inference and fetch_response invocations; streamed agent and workflow invocations no longer emit them.
