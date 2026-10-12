@@ -22,7 +22,7 @@ from opentelemetry.trace import (
 from opentelemetry.util.genai._instruments import _Instruments
 from opentelemetry.util.genai._invocation import (
     Error,
-    GenAIInvocation,
+    StreamedResponseInvocation,
     get_content_attributes,
 )
 from opentelemetry.util.genai.completion_hook import (
@@ -205,7 +205,7 @@ class InferenceData:
                 self.metric_attributes.setdefault(k, v)
 
 
-class InferenceInvocation(GenAIInvocation):
+class InferenceInvocation(StreamedResponseInvocation):
     """Represents a single LLM chat/completion call.
 
     Use handler.inference(provider) rather than constructing this directly.
