@@ -242,9 +242,9 @@ class GenAIInvocation(AbstractContextManager["GenAIInvocation"]):
         """Record one output chunk arriving.
 
         .. deprecated:: 1.3b0
-            Only ``InferenceInvocation`` and ``FetchResponseInvocation``
-            record stream chunks. On other invocation types this is a no-op,
-            since semconv defines no streaming telemetry for them.
+            Only ``InferenceInvocation`` records stream chunks. On other
+            invocation types this is a no-op, since semconv defines chunk
+            timing for inference only.
         """
 
     def _record_client_metrics(self) -> None:
@@ -361,58 +361,6 @@ def _json_dumps_unless_str(value: object) -> str | None:
     if converted is None or isinstance(converted, str):
         return converted
     return gen_ai_json_dumps(converted)
-
-
-class StreamedResponseInvocation(GenAIInvocation):
-    """Base for invocations whose model response can be streamed in chunks.
-
-    Reference: https://github.com/open-telemetry/semantic-conventions-genai/blob/main/docs/gen-ai/gen-ai-metrics.md#metric-gen_aiclientoperationtime_to_first_chunk
-    """
-
-    # Set once the invocation is handed to a stream wrapper.
-    _request_stream: bool | None = None
-    _ttfc_seconds: float | None = None
-    _stream_last_chunk_at: float | None = None
-
-    def record_stream_chunk(self) -> None:
-        """Mark the request as streamed and record one output chunk arriving."""
-        if self._finished:
-            return
-        self._request_stream = True
-        self._on_stream_chunk(timeit.default_timer())
-
-    def _on_stream_chunk(self, chunk_at: float) -> None:
-        """Record streaming timing for one output chunk as it arrives.
-
-        The first chunk's delta from the invocation start is the
-        time-to-first-chunk; each later chunk's delta from the previous one is
-        the inter-chunk gap.
-        """
-        last_chunk_at = (
-            self._stream_last_chunk_at
-            if self._stream_last_chunk_at is not None
-            else self._monotonic_start_s
-        )
-
-        self._stream_last_chunk_at = chunk_at
-        delta = max(chunk_at - last_chunk_at, 0.0)
-        is_first_chunk = self._ttfc_seconds is None
-        if is_first_chunk:
-            self._ttfc_seconds = delta
-
-        attributes = self._get_metric_attributes()
-        if is_first_chunk:
-            self._instruments.time_to_first_chunk.record(
-                delta,
-                attributes=attributes,
-                context=self._span_context,
-            )
-        else:
-            self._instruments.time_per_output_chunk.record(
-                delta,
-                attributes=attributes,
-                context=self._span_context,
-            )
 
 
 def get_content_attributes(

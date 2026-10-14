@@ -810,7 +810,7 @@ _CHUNK_METRICS = {
     "gen_ai.client.operation.time_per_output_chunk",
 }
 
-_NON_STREAMING_INVOCATIONS = {
+_NON_INFERENCE_INVOCATIONS = {
     "local_agent": lambda handler: handler.invoke_local_agent(
         agent_name="agent"
     ),
@@ -818,6 +818,9 @@ _NON_STREAMING_INVOCATIONS = {
         "prov", agent_name="agent"
     ),
     "workflow": lambda handler: handler.workflow("flow"),
+    "fetch_response": lambda handler: handler.fetch_response(
+        "prov", response_id="resp-1"
+    ),
 }
 
 
@@ -864,10 +867,10 @@ class _AgentAsyncWrapper(_TimingAsyncWrapper):
 
 @pytest.mark.parametrize(
     "factory",
-    _NON_STREAMING_INVOCATIONS.values(),
-    ids=_NON_STREAMING_INVOCATIONS.keys(),
+    _NON_INFERENCE_INVOCATIONS.values(),
+    ids=_NON_INFERENCE_INVOCATIONS.keys(),
 )
-def test_sync_wrapper_records_no_chunk_metrics_for_non_streaming_invocation(
+def test_sync_wrapper_records_no_chunk_metrics_for_non_inference_invocation(
     factory,
 ):
     handler, reader = _handler_with_metric_reader()
@@ -884,8 +887,8 @@ def test_sync_wrapper_records_no_chunk_metrics_for_non_streaming_invocation(
 
 @pytest.mark.parametrize(
     "factory",
-    _NON_STREAMING_INVOCATIONS.values(),
-    ids=_NON_STREAMING_INVOCATIONS.keys(),
+    _NON_INFERENCE_INVOCATIONS.values(),
+    ids=_NON_INFERENCE_INVOCATIONS.keys(),
 )
 def test_sync_wrapper_records_no_chunk_metrics_when_subclass_holds_invocation(
     factory,
@@ -902,10 +905,10 @@ def test_sync_wrapper_records_no_chunk_metrics_when_subclass_holds_invocation(
 
 @pytest.mark.parametrize(
     "factory",
-    _NON_STREAMING_INVOCATIONS.values(),
-    ids=_NON_STREAMING_INVOCATIONS.keys(),
+    _NON_INFERENCE_INVOCATIONS.values(),
+    ids=_NON_INFERENCE_INVOCATIONS.keys(),
 )
-def test_async_wrapper_records_no_chunk_metrics_for_non_streaming_invocation(
+def test_async_wrapper_records_no_chunk_metrics_for_non_inference_invocation(
     factory,
 ):
     async def exercise():
@@ -925,8 +928,8 @@ def test_async_wrapper_records_no_chunk_metrics_for_non_streaming_invocation(
 
 @pytest.mark.parametrize(
     "factory",
-    _NON_STREAMING_INVOCATIONS.values(),
-    ids=_NON_STREAMING_INVOCATIONS.keys(),
+    _NON_INFERENCE_INVOCATIONS.values(),
+    ids=_NON_INFERENCE_INVOCATIONS.keys(),
 )
 def test_async_wrapper_records_no_chunk_metrics_when_subclass_holds_invocation(
     factory,

@@ -359,7 +359,7 @@ class TelemetryHandlerMetricsTest(TestBase):
         (span,) = self.get_finished_spans()
         self.assertIs(span.attributes[GenAI.GEN_AI_REQUEST_STREAM], True)
 
-    def test_record_stream_chunk_is_noop_for_non_streaming_operations(
+    def test_record_stream_chunk_is_noop_for_non_inference_operations(
         self,
     ) -> None:
         handler = TelemetryHandler(
@@ -375,6 +375,9 @@ class TelemetryHandlerMetricsTest(TestBase):
             ),
             "workflow": lambda: handler.workflow("flow"),
             "tool": lambda: handler.tool("tool"),
+            "fetch_response": lambda: handler.fetch_response(
+                "prov", response_id="resp-1"
+            ),
         }
         for name, factory in factories.items():
             with self.subTest(name):

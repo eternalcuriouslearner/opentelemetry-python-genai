@@ -15,7 +15,7 @@ from opentelemetry.trace import SpanKind, Tracer
 from opentelemetry.util.genai._instruments import _Instruments
 from opentelemetry.util.genai._invocation import (
     Error,
-    StreamedResponseInvocation,
+    GenAIInvocation,
     get_content_attributes,
 )
 from opentelemetry.util.genai.completion_hook import CompletionHook
@@ -37,7 +37,7 @@ _GEN_AI_REQUEST_STREAM_CURSOR: Final = "gen_ai.request.stream_cursor"
 _GEN_AI_RESPONSE_STATUS: Final = "gen_ai.response.status"
 
 
-class FetchResponseInvocation(StreamedResponseInvocation):
+class FetchResponseInvocation(GenAIInvocation):
     """Represents a single fetch of a previously generated model response.
 
     Use handler.fetch_response() rather than constructing this directly.

@@ -270,8 +270,8 @@ class SyncStreamWrapper(
             except BaseException as error:
                 self._finalize_failure(error)
                 raise
-            # Agent and workflow invocations are passed for context scoping
-            # only; chunk timing is defined for inference streams.
+            # Non-inference invocations (agent, workflow, fetch_response) are
+            # passed for context scoping only; chunk timing is inference-only.
             on_stream_chunk: Callable[[float], None] | None = getattr(
                 self._self_invocation, "_on_stream_chunk", None
             )
@@ -488,8 +488,8 @@ class AsyncStreamWrapper(
                 self._finalize_failure(error)
                 raise
 
-            # Agent and workflow invocations are passed for context scoping
-            # only; chunk timing is defined for inference streams.
+            # Non-inference invocations (agent, workflow, fetch_response) are
+            # passed for context scoping only; chunk timing is inference-only.
             on_stream_chunk: Callable[[float], None] | None = getattr(
                 self._self_invocation, "_on_stream_chunk", None
             )
