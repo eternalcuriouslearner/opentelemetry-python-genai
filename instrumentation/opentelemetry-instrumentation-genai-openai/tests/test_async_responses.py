@@ -49,12 +49,16 @@ from .test_responses import (
     assert_responses_streaming_timing_metrics,
 )
 from .test_utils import (
+    COMPACTED_INPUT,
+    COMPACTION_CONTEXT_MANAGEMENT,
+    COMPACTION_TRIGGER_INPUT,
     COMPUTER_SCREENSHOT_DATA_URL,
     CUSTOM_TOOL_MODEL,
     DEFAULT_MODEL,
     EXPECTED_CUSTOM_TOOL_INPUT_MESSAGES,
     EXPECTED_TOOL_DEFINITIONS,
     EXPECTED_TOOL_LOOP_INPUT_MESSAGES,
+    GEN_AI_CONVERSATION_COMPACTED,
     GEN_AI_RESPONSE_STATUS,
     USER_ONLY_EXPECTED_INPUT_MESSAGES,
     USER_ONLY_PROMPT,
@@ -82,6 +86,7 @@ try:
     _has_tools_param = "tools" in _create_params
     _has_reasoning_param = "reasoning" in _create_params
     _has_conversation_param = "conversation" in _create_params
+    _has_context_management_param = "context_management" in _create_params
     _stream_params = set(
         inspect.signature(_responses_module.AsyncResponses.stream).parameters
     )
@@ -97,6 +102,7 @@ except ImportError:
     _has_tools_param = False
     _has_reasoning_param = False
     _has_conversation_param = False
+    _has_context_management_param = False
     _stream_has_service_tier = False
     _has_custom_tool_types = False
 
@@ -252,6 +258,80 @@ async def test_async_responses_create_basic(
     )
     assert GenAIAttributes.GEN_AI_INPUT_MESSAGES not in span.attributes
     assert GenAIAttributes.GEN_AI_OUTPUT_MESSAGES not in span.attributes
+    assert GEN_AI_CONVERSATION_COMPACTED not in span.attributes
+
+
+@pytest.mark.asyncio()
+async def test_async_responses_create_records_compacted_input(
+    span_exporter, async_openai_client, instrument_no_content, vcr
+):
+    _skip_if_not_latest()
+
+    with vcr.use_cassette(
+        "test_async_responses_create_basic[content_mode0].yaml"
+    ):
+        await async_openai_client.responses.create(
+            model=DEFAULT_MODEL,
+            instructions=SYSTEM_INSTRUCTIONS,
+            input=COMPACTED_INPUT,
+            stream=False,
+        )
+
+    (span,) = span_exporter.get_finished_spans()
+    assert span.attributes[GEN_AI_CONVERSATION_COMPACTED] is True
+
+
+@pytest.mark.asyncio()
+@pytest.mark.skipif(
+    not _has_context_management_param,
+    reason="openai SDK too old to support 'context_management' on Responses.create",
+)
+async def test_async_responses_create_records_server_compaction(
+    span_exporter, async_openai_client, instrument_no_content, vcr
+):
+    _skip_if_not_latest()
+
+    with vcr.use_cassette(
+        "test_responses_create_records_server_compaction[content_mode0].yaml"
+    ):
+        response = await async_openai_client.responses.create(
+            model=REASONING_MODEL,
+            instructions=SYSTEM_INSTRUCTIONS,
+            input=COMPACTION_TRIGGER_INPUT,
+            context_management=COMPACTION_CONTEXT_MANAGEMENT,
+            stream=False,
+        )
+
+    assert any(item.type == "compaction" for item in response.output)
+    (span,) = span_exporter.get_finished_spans()
+    assert span.attributes[GEN_AI_CONVERSATION_COMPACTED] is True
+
+
+@pytest.mark.asyncio()
+@pytest.mark.skipif(
+    not _has_context_management_param,
+    reason="openai SDK too old to support 'context_management' on Responses.create",
+)
+async def test_async_responses_create_streaming_records_server_compaction(
+    span_exporter, async_openai_client, instrument_no_content, vcr
+):
+    _skip_if_not_latest()
+
+    with vcr.use_cassette(
+        "test_responses_create_streaming_records_server_compaction[content_mode0].yaml"
+    ):
+        stream = await async_openai_client.responses.create(
+            model=REASONING_MODEL,
+            instructions=SYSTEM_INSTRUCTIONS,
+            input=COMPACTION_TRIGGER_INPUT,
+            context_management=COMPACTION_CONTEXT_MANAGEMENT,
+            stream=True,
+        )
+        response = await _collect_completed_response(stream)
+
+    assert any(item.type == "compaction" for item in response.output)
+    (span,) = span_exporter.get_finished_spans()
+    assert span.attributes[GEN_AI_CONVERSATION_COMPACTED] is True
 
 
 RETRIEVE_RESPONSE_ID = (

@@ -18,6 +18,7 @@ from opentelemetry.instrumentation.genai.openai.utils import get_served_model
 from opentelemetry.semconv._incubating.attributes import (
     openai_attributes as OpenAIAttributes,
 )
+from opentelemetry.util.genai.handler import TelemetryHandler
 from opentelemetry.util.genai.types import (
     BlobPart,
     FilePart,
@@ -32,6 +33,8 @@ from opentelemetry.util.genai.types import (
     UriPart,
 )
 from opentelemetry.util.genai.utils import gen_ai_json_dumps
+
+from .test_utils import GEN_AI_CONVERSATION_COMPACTED
 
 try:
     # Responses types are not available in the oldest supported OpenAI SDK.
@@ -127,6 +130,15 @@ _supports_computer_tool_call = _response_accepts_output_item(
             "button": "left",
         },
     }
+)
+
+_COMPACTION_ITEM = {
+    "id": "cmp_1",
+    "type": "compaction",
+    "encrypted_content": "opaque",
+}
+_supports_compaction_item: bool = _response_accepts_output_item(
+    _COMPACTION_ITEM
 )
 
 _supports_computer_tool_actions: bool = _response_accepts_output_item(
@@ -1868,6 +1880,7 @@ def _make_request_invocation():
         system_instruction=[],
         input_messages=[],
         tool_definitions=None,
+        conversation_compacted=None,
         attributes={},
     )
 
@@ -1900,6 +1913,118 @@ def test_apply_request_attributes_captures_tool_definitions(loaded_module):
         not_captured, params, capture_content=False
     )
     assert not_captured.tool_definitions is None
+
+
+@pytest.mark.parametrize("capture_content", [True, False])
+def test_apply_request_attributes_marks_compacted_input(
+    loaded_module, capture_content
+):
+    params = loaded_module.extract_params(
+        model="gpt-5.4",
+        input=[
+            {"role": "user", "content": "Continue."},
+            _COMPACTION_ITEM,
+        ],
+    )
+
+    invocation = _make_request_invocation()
+    loaded_module.apply_request_attributes(
+        invocation, params, capture_content=capture_content
+    )
+
+    assert invocation.conversation_compacted is True
+
+
+@pytest.mark.skipif(
+    not _supports_compaction_item,
+    reason="openai SDK has no compaction output item",
+)
+def test_apply_request_attributes_marks_compacted_sdk_input(loaded_module):
+    """A compacted window passed back as SDK output items is detected."""
+    compacted = _make_response(output=[_COMPACTION_ITEM])
+    params = loaded_module.extract_params(
+        model="gpt-5.4", input=compacted.output
+    )
+
+    invocation = _make_request_invocation()
+    loaded_module.apply_request_attributes(
+        invocation, params, capture_content=False
+    )
+
+    assert invocation.conversation_compacted is True
+
+
+@pytest.mark.parametrize(
+    "input_items",
+    [
+        "Continue.",
+        [{"role": "user", "content": "Continue."}],
+        [{"type": "compaction_trigger"}],
+        None,
+    ],
+)
+def test_apply_request_attributes_leaves_uncompacted_input_unset(
+    loaded_module, input_items
+):
+    params = loaded_module.extract_params(model="gpt-5.4", input=input_items)
+
+    invocation = _make_request_invocation()
+    loaded_module.apply_request_attributes(
+        invocation, params, capture_content=True
+    )
+
+    assert invocation.conversation_compacted is None
+
+
+@pytest.mark.skipif(
+    not _supports_compaction_item,
+    reason="openai SDK has no compaction output item",
+)
+@pytest.mark.parametrize("capture_content", [True, False])
+def test_set_invocation_response_attributes_marks_compacted_output(
+    loaded_module, tracer_provider, span_exporter, capture_content
+):
+    invocation = TelemetryHandler(tracer_provider=tracer_provider).inference(
+        provider="openai", request_model="gpt-5.4"
+    )
+    result = _make_response(
+        output=[
+            _COMPACTION_ITEM,
+            {
+                "id": "msg_1",
+                "type": "message",
+                "status": "completed",
+                "role": "assistant",
+                "content": [
+                    {"type": "output_text", "text": "Done.", "annotations": []}
+                ],
+            },
+        ]
+    )
+
+    loaded_module.set_invocation_response_attributes(
+        invocation, result, capture_content=capture_content
+    )
+    invocation.stop()
+
+    (span,) = span_exporter.get_finished_spans()
+    assert span.attributes[GEN_AI_CONVERSATION_COMPACTED] is True
+
+
+def test_set_invocation_response_attributes_leaves_uncompacted_output_unset(
+    loaded_module, tracer_provider, span_exporter
+):
+    invocation = TelemetryHandler(tracer_provider=tracer_provider).inference(
+        provider="openai", request_model="gpt-4.1"
+    )
+
+    loaded_module.set_invocation_response_attributes(
+        invocation, _make_response(), capture_content=False
+    )
+    invocation.stop()
+
+    (span,) = span_exporter.get_finished_spans()
+    assert GEN_AI_CONVERSATION_COMPACTED not in span.attributes
 
 
 def test_set_fetch_response_attributes_captures_tool_definitions(
