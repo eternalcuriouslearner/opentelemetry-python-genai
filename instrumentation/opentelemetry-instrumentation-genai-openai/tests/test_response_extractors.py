@@ -2027,6 +2027,35 @@ def test_set_invocation_response_attributes_leaves_uncompacted_output_unset(
     assert GEN_AI_CONVERSATION_COMPACTED not in span.attributes
 
 
+@pytest.mark.parametrize(
+    ("event", "expected"),
+    [
+        (
+            {"type": "response.output_item.added", "item": _COMPACTION_ITEM},
+            True,
+        ),
+        (
+            {"type": "response.output_item.done", "item": _COMPACTION_ITEM},
+            True,
+        ),
+        (
+            {"type": "response.output_item.done", "item": {"type": "message"}},
+            None,
+        ),
+        ({"type": "response.output_text.delta", "delta": "compaction"}, None),
+        ({"type": "response.output_item.done"}, None),
+    ],
+)
+def test_set_stream_event_attributes_marks_compaction_items(
+    loaded_module, event, expected
+):
+    invocation = SimpleNamespace(conversation_compacted=None)
+
+    loaded_module.set_stream_event_attributes(invocation, event)
+
+    assert invocation.conversation_compacted is expected
+
+
 def test_set_fetch_response_attributes_captures_tool_definitions(
     loaded_module,
 ):

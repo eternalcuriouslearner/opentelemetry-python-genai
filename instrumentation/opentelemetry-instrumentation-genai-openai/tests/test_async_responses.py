@@ -41,12 +41,14 @@ from opentelemetry.trace.status import StatusCode
 from opentelemetry.util.genai.utils import is_experimental_mode
 
 from .test_responses import (
+    SERVER_COMPACTION_STREAM_CASSETTE,
     ComputerCallOutput,
     ResponseComputerToolCall,
     _has_computer_call_output_input_type,
     _has_computer_tool_type,
     _supports_computer_call_response_output,
     assert_responses_streaming_timing_metrics,
+    is_compaction_item_event,
 )
 from .test_utils import (
     COMPACTED_INPUT,
@@ -332,6 +334,108 @@ async def test_async_responses_create_streaming_records_server_compaction(
     assert any(item.type == "compaction" for item in response.output)
     (span,) = span_exporter.get_finished_spans()
     assert span.attributes[GEN_AI_CONVERSATION_COMPACTED] is True
+
+
+_requires_context_management = pytest.mark.skipif(
+    not _has_context_management_param,
+    reason="openai SDK too old to support 'context_management' on Responses.create",
+)
+
+
+async def _create_compaction_stream(async_openai_client):
+    return await async_openai_client.responses.create(
+        model=REASONING_MODEL,
+        instructions=SYSTEM_INSTRUCTIONS,
+        input=COMPACTION_TRIGGER_INPUT,
+        context_management=COMPACTION_CONTEXT_MANAGEMENT,
+        stream=True,
+    )
+
+
+@pytest.mark.asyncio()
+@_requires_context_management
+async def test_async_responses_streaming_close_after_compaction_records_compaction(
+    span_exporter, async_openai_client, instrument_no_content, vcr
+):
+    _skip_if_not_latest()
+
+    with vcr.use_cassette(f"{SERVER_COMPACTION_STREAM_CASSETTE}.yaml"):
+        stream = await _create_compaction_stream(async_openai_client)
+        async for event in stream:
+            if is_compaction_item_event(event):
+                break
+        await stream.close()
+
+    (span,) = span_exporter.get_finished_spans()
+    assert span.attributes[GEN_AI_CONVERSATION_COMPACTED] is True
+    assert ErrorAttributes.ERROR_TYPE not in span.attributes
+
+
+@pytest.mark.asyncio()
+@_requires_context_management
+async def test_async_responses_streaming_caller_error_after_compaction_records_compaction(
+    span_exporter, async_openai_client, instrument_no_content, vcr
+):
+    _skip_if_not_latest()
+
+    with vcr.use_cassette(f"{SERVER_COMPACTION_STREAM_CASSETTE}.yaml"):
+        with pytest.raises(ValueError, match="caller error after compaction"):
+            async with await _create_compaction_stream(
+                async_openai_client
+            ) as stream:
+                async for event in stream:
+                    if is_compaction_item_event(event):
+                        raise ValueError("caller error after compaction")
+
+    (span,) = span_exporter.get_finished_spans()
+    assert span.attributes[GEN_AI_CONVERSATION_COMPACTED] is True
+    assert span.attributes[ErrorAttributes.ERROR_TYPE] == "ValueError"
+
+
+@pytest.mark.asyncio()
+@_requires_context_management
+async def test_async_responses_streaming_stream_error_after_compaction_records_compaction(
+    span_exporter, async_openai_client, instrument_no_content, monkeypatch, vcr
+):
+    _skip_if_not_latest()
+
+    class FailAfterCompaction:
+        def __init__(self, inner):
+            self._inner = inner
+            self._compacted = False
+
+        def __aiter__(self):
+            return self
+
+        async def __anext__(self):
+            if self._compacted:
+                raise ConnectionError("connection reset after compaction")
+            event = await self._inner.__anext__()
+            self._compacted = is_compaction_item_event(event)
+            return event
+
+        async def close(self):
+            return await self._inner.close()
+
+        def __getattr__(self, name):
+            return getattr(self._inner, name)
+
+    with vcr.use_cassette(f"{SERVER_COMPACTION_STREAM_CASSETTE}.yaml"):
+        stream = await _create_compaction_stream(async_openai_client)
+        monkeypatch.setattr(
+            stream, "stream", FailAfterCompaction(stream.stream)
+        )
+
+        with pytest.raises(
+            ConnectionError, match="connection reset after compaction"
+        ):
+            async with stream:
+                async for _ in stream:
+                    pass
+
+    (span,) = span_exporter.get_finished_spans()
+    assert span.attributes[GEN_AI_CONVERSATION_COMPACTED] is True
+    assert span.attributes[ErrorAttributes.ERROR_TYPE] == "ConnectionError"
 
 
 RETRIEVE_RESPONSE_ID = (

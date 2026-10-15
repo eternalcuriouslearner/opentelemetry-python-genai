@@ -457,6 +457,115 @@ def test_responses_create_streaming_records_server_compaction(
     assert span.attributes[GEN_AI_CONVERSATION_COMPACTED] is True
 
 
+SERVER_COMPACTION_STREAM_CASSETTE = (
+    "test_responses_create_streaming_records_server_compaction[content_mode0]"
+)
+_requires_context_management = pytest.mark.skipif(
+    not _has_context_management_param,
+    reason="openai SDK too old to support 'context_management' on Responses.create",
+)
+
+
+def is_compaction_item_event(event) -> bool:
+    return (
+        event.type == "response.output_item.done"
+        and getattr(event.item, "type", None) == "compaction"
+    )
+
+
+def _create_compaction_stream(openai_client):
+    return openai_client.responses.create(
+        model=REASONING_MODEL,
+        instructions=SYSTEM_INSTRUCTIONS,
+        input=COMPACTION_TRIGGER_INPUT,
+        context_management=COMPACTION_CONTEXT_MANAGEMENT,
+        stream=True,
+    )
+
+
+@pytest.mark.cassette(SERVER_COMPACTION_STREAM_CASSETTE)
+@pytest.mark.vcr()
+@_requires_context_management
+def test_responses_streaming_close_after_compaction_records_compaction(
+    span_exporter, openai_client, instrument_no_content
+):
+    _skip_if_not_latest()
+
+    stream = _create_compaction_stream(openai_client)
+    for event in stream:
+        if is_compaction_item_event(event):
+            break
+    stream.close()
+
+    (span,) = span_exporter.get_finished_spans()
+    assert span.attributes[GEN_AI_CONVERSATION_COMPACTED] is True
+    assert ErrorAttributes.ERROR_TYPE not in span.attributes
+
+
+@pytest.mark.cassette(SERVER_COMPACTION_STREAM_CASSETTE)
+@pytest.mark.vcr()
+@_requires_context_management
+def test_responses_streaming_caller_error_after_compaction_records_compaction(
+    span_exporter, openai_client, instrument_no_content
+):
+    _skip_if_not_latest()
+
+    with pytest.raises(ValueError, match="caller error after compaction"):
+        with _create_compaction_stream(openai_client) as stream:
+            for event in stream:
+                if is_compaction_item_event(event):
+                    raise ValueError("caller error after compaction")
+
+    (span,) = span_exporter.get_finished_spans()
+    assert span.attributes[GEN_AI_CONVERSATION_COMPACTED] is True
+    assert span.attributes[ErrorAttributes.ERROR_TYPE] == "ValueError"
+
+
+@pytest.mark.cassette(SERVER_COMPACTION_STREAM_CASSETTE)
+@pytest.mark.vcr()
+@_requires_context_management
+def test_responses_streaming_stream_error_after_compaction_records_compaction(
+    span_exporter, openai_client, instrument_no_content, monkeypatch
+):
+    _skip_if_not_latest()
+
+    stream = _create_compaction_stream(openai_client)
+
+    class FailAfterCompaction:
+        def __init__(self, inner):
+            self._inner = inner
+            self._compacted = False
+
+        def __iter__(self):
+            return self
+
+        def __next__(self):
+            if self._compacted:
+                raise ConnectionError("connection reset after compaction")
+            event = next(self._inner)
+            self._compacted = is_compaction_item_event(event)
+            return event
+
+        def close(self):
+            return self._inner.close()
+
+        def __getattr__(self, name):
+            return getattr(self._inner, name)
+
+    monkeypatch.setattr(stream, "stream", FailAfterCompaction(stream.stream))
+
+    with pytest.raises(
+        ConnectionError, match="connection reset after compaction"
+    ):
+        with stream:
+            for _ in stream:
+                pass
+
+    (span,) = span_exporter.get_finished_spans()
+    assert span.attributes[GEN_AI_CONVERSATION_COMPACTED] is True
+    assert span.attributes[ErrorAttributes.ERROR_TYPE] == "ConnectionError"
+
+
 RETRIEVE_RESPONSE_ID = (
     "resp_0f4faba17dcd0f1e0069e2f3e4907881909179832ba1237025"
 )
