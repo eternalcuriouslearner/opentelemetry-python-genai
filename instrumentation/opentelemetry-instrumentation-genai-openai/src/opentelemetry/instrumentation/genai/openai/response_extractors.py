@@ -15,7 +15,7 @@ from opentelemetry.semconv._incubating.attributes import (
     openai_attributes as OpenAIAttributes,
 )
 
-from ._raw_response import ParsableResponse
+from ._raw_response import RawResponseLike
 from .utils import (
     _content_to_parts,
     _openai_response_format_to_output_type,
@@ -220,6 +220,7 @@ def extract_params(
     service_tier: str | None = None,
     temperature: float | None = None,
     text: object | None = None,
+    text_format: object | None = None,
     tools: Iterable[ToolParam] | None = None,
     top_p: float | None = None,
     **_kwargs: object,
@@ -247,7 +248,14 @@ def extract_params(
             else None
         ),
         temperature=_get_float(temperature),
-        output_type=_extract_output_type_from_value(text),
+        output_type=(
+            _extract_output_type_from_value(text)
+            or (
+                GenAIAttributes.GenAiOutputTypeValues.JSON.value
+                if isinstance(text_format, type)
+                else None
+            )
+        ),
         tools=_get_tools(tools),
         top_p=_get_float(top_p),
     )
@@ -316,7 +324,7 @@ def _get_input_message(item: object) -> InputMessage | None:
     if InputMessage is None or Role is None:
         return None
 
-    item_type = _get_field(item, "type")
+    item_type = _get_str(_get_field(item, "type"))
 
     if item_type in _TOOL_CALL_ARGUMENT_FIELDS and ToolCall is not None:
         raw = _get_field(item, _TOOL_CALL_ARGUMENT_FIELDS[item_type])
@@ -958,10 +966,19 @@ def _parse_raw_response(
 ) -> object:
     """Return the payload of a non-streaming ``with_raw_response`` result."""
     if is_streamed_raw_response(request_kwargs) or not isinstance(
-        response, ParsableResponse
+        response, RawResponseLike
     ):
         return response
-    return response.parse()
+    try:
+        payload = json.loads(response.http_response.content)
+    except (TypeError, ValueError, AttributeError):
+        return None
+    if Response is None:
+        return None
+    try:
+        return Response.model_construct(**payload)
+    except Exception:  # pylint: disable=broad-exception-caught
+        return None
 
 
 def set_invocation_response_attributes(
