@@ -43,6 +43,7 @@ from opentelemetry.util.genai.utils import is_experimental_mode
 from .test_utils import (
     COMPACTED_INPUT,
     COMPACTION_CONTEXT_MANAGEMENT,
+    COMPACTION_MODEL,
     COMPACTION_TRIGGER_INPUT,
     COMPUTER_SCREENSHOT_DATA_URL,
     CUSTOM_TOOL_CALL_ID,
@@ -410,18 +411,21 @@ def test_responses_create_records_compacted_input(
     assert span.attributes[GEN_AI_CONVERSATION_COMPACTED] is True
 
 
-@pytest.mark.vcr()
-@pytest.mark.skipif(
+_requires_context_management = pytest.mark.skipif(
     not _has_context_management_param,
     reason="openai SDK too old to support 'context_management' on Responses.create",
 )
+
+
+@pytest.mark.vcr()
+@_requires_context_management
 def test_responses_create_records_server_compaction(
     span_exporter, openai_client, instrument_no_content
 ):
     _skip_if_not_latest()
 
     response = openai_client.responses.create(
-        model=REASONING_MODEL,
+        model=COMPACTION_MODEL,
         instructions=SYSTEM_INSTRUCTIONS,
         input=COMPACTION_TRIGGER_INPUT,
         context_management=COMPACTION_CONTEXT_MANAGEMENT,
@@ -434,17 +438,14 @@ def test_responses_create_records_server_compaction(
 
 
 @pytest.mark.vcr()
-@pytest.mark.skipif(
-    not _has_context_management_param,
-    reason="openai SDK too old to support 'context_management' on Responses.create",
-)
+@_requires_context_management
 def test_responses_create_streaming_records_server_compaction(
     span_exporter, openai_client, instrument_no_content
 ):
     _skip_if_not_latest()
 
     with openai_client.responses.create(
-        model=REASONING_MODEL,
+        model=COMPACTION_MODEL,
         instructions=SYSTEM_INSTRUCTIONS,
         input=COMPACTION_TRIGGER_INPUT,
         context_management=COMPACTION_CONTEXT_MANAGEMENT,
@@ -460,10 +461,6 @@ def test_responses_create_streaming_records_server_compaction(
 SERVER_COMPACTION_STREAM_CASSETTE = (
     "test_responses_create_streaming_records_server_compaction[content_mode0]"
 )
-_requires_context_management = pytest.mark.skipif(
-    not _has_context_management_param,
-    reason="openai SDK too old to support 'context_management' on Responses.create",
-)
 
 
 def is_compaction_item_event(event) -> bool:
@@ -475,7 +472,7 @@ def is_compaction_item_event(event) -> bool:
 
 def _create_compaction_stream(openai_client):
     return openai_client.responses.create(
-        model=REASONING_MODEL,
+        model=COMPACTION_MODEL,
         instructions=SYSTEM_INSTRUCTIONS,
         input=COMPACTION_TRIGGER_INPUT,
         context_management=COMPACTION_CONTEXT_MANAGEMENT,

@@ -84,6 +84,7 @@ COMPACTED_INPUT = [
 COMPACTION_CONTEXT_MANAGEMENT = [
     {"type": "compaction", "compact_threshold": 1000}
 ]
+COMPACTION_MODEL = "gpt-5.4"
 # Well past ``compact_threshold`` so the server compacts during the request.
 COMPACTION_TRIGGER_INPUT = (
     "Remember this sentence for later. " * 400 + "Now say this is a test."

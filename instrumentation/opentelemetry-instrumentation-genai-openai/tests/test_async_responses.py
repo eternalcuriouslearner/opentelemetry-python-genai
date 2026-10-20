@@ -53,6 +53,7 @@ from .test_responses import (
 from .test_utils import (
     COMPACTED_INPUT,
     COMPACTION_CONTEXT_MANAGEMENT,
+    COMPACTION_MODEL,
     COMPACTION_TRIGGER_INPUT,
     COMPUTER_SCREENSHOT_DATA_URL,
     CUSTOM_TOOL_MODEL,
@@ -283,11 +284,14 @@ async def test_async_responses_create_records_compacted_input(
     assert span.attributes[GEN_AI_CONVERSATION_COMPACTED] is True
 
 
-@pytest.mark.asyncio()
-@pytest.mark.skipif(
+_requires_context_management = pytest.mark.skipif(
     not _has_context_management_param,
     reason="openai SDK too old to support 'context_management' on Responses.create",
 )
+
+
+@pytest.mark.asyncio()
+@_requires_context_management
 async def test_async_responses_create_records_server_compaction(
     span_exporter, async_openai_client, instrument_no_content, vcr
 ):
@@ -297,7 +301,7 @@ async def test_async_responses_create_records_server_compaction(
         "test_responses_create_records_server_compaction[content_mode0].yaml"
     ):
         response = await async_openai_client.responses.create(
-            model=REASONING_MODEL,
+            model=COMPACTION_MODEL,
             instructions=SYSTEM_INSTRUCTIONS,
             input=COMPACTION_TRIGGER_INPUT,
             context_management=COMPACTION_CONTEXT_MANAGEMENT,
@@ -310,10 +314,7 @@ async def test_async_responses_create_records_server_compaction(
 
 
 @pytest.mark.asyncio()
-@pytest.mark.skipif(
-    not _has_context_management_param,
-    reason="openai SDK too old to support 'context_management' on Responses.create",
-)
+@_requires_context_management
 async def test_async_responses_create_streaming_records_server_compaction(
     span_exporter, async_openai_client, instrument_no_content, vcr
 ):
@@ -323,7 +324,7 @@ async def test_async_responses_create_streaming_records_server_compaction(
         "test_responses_create_streaming_records_server_compaction[content_mode0].yaml"
     ):
         stream = await async_openai_client.responses.create(
-            model=REASONING_MODEL,
+            model=COMPACTION_MODEL,
             instructions=SYSTEM_INSTRUCTIONS,
             input=COMPACTION_TRIGGER_INPUT,
             context_management=COMPACTION_CONTEXT_MANAGEMENT,
@@ -336,15 +337,9 @@ async def test_async_responses_create_streaming_records_server_compaction(
     assert span.attributes[GEN_AI_CONVERSATION_COMPACTED] is True
 
 
-_requires_context_management = pytest.mark.skipif(
-    not _has_context_management_param,
-    reason="openai SDK too old to support 'context_management' on Responses.create",
-)
-
-
 async def _create_compaction_stream(async_openai_client):
     return await async_openai_client.responses.create(
-        model=REASONING_MODEL,
+        model=COMPACTION_MODEL,
         instructions=SYSTEM_INSTRUCTIONS,
         input=COMPACTION_TRIGGER_INPUT,
         context_management=COMPACTION_CONTEXT_MANAGEMENT,
