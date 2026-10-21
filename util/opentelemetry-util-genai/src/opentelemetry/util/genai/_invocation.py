@@ -10,7 +10,7 @@ from contextlib import AbstractContextManager, contextmanager
 from contextvars import Token
 from dataclasses import asdict
 from types import TracebackType
-from typing import Any, TypeAlias, cast
+from typing import Any, ClassVar, TypeAlias, cast
 
 from typing_extensions import Self
 
@@ -80,6 +80,9 @@ class GenAIInvocation(AbstractContextManager["GenAIInvocation"]):
 
     _dataclass_class_object: Callable[[], Any] | None = None
     """Dataclass type instantiated to attach initial context data."""
+
+    _records_stream_telemetry: ClassVar[bool] = False
+    """Whether stream wrappers mark this invocation as streamed and record chunk timing."""
 
     def __init__(
         self,

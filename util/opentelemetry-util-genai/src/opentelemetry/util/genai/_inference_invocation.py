@@ -214,6 +214,7 @@ class InferenceInvocation(GenAIInvocation):
 
     _context_key = CLIENT_INFERENCE_CONTEXT_KEY
     _dataclass_class_object = InferenceData
+    _records_stream_telemetry = True
 
     # Set once the invocation is handed to a stream wrapper.
     _request_stream: bool | None = None

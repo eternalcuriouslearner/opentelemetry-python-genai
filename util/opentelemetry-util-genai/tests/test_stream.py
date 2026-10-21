@@ -636,6 +636,8 @@ def test_async_stream_wrapper_abandon_does_not_override_failure():
 class _FakeTimingInvocation:
     """Minimal stand-in for InferenceInvocation's timing seam."""
 
+    _records_stream_telemetry = True
+
     def __init__(self):
         self.chunk_times = []
         self._request_stream = None
@@ -644,8 +646,8 @@ class _FakeTimingInvocation:
         self.chunk_times.append(chunk_at)
 
 
-class _ProtocolOnlyTimingInvocation:
-    """Implements only the timing protocol without _request_stream."""
+class _UnflaggedTimingInvocation:
+    """Has the timing hook but does not opt in to stream telemetry."""
 
     def __init__(self):
         self.chunk_times = []
@@ -708,15 +710,14 @@ def test_sync_wrapper_marks_request_stream():
     assert invocation._request_stream is True
 
 
-def test_sync_wrapper_works_without_request_stream():
-    invocation = _ProtocolOnlyTimingInvocation()
+def test_sync_wrapper_skips_stream_telemetry_without_flag():
+    invocation = _UnflaggedTimingInvocation()
     wrapper = _TimingSyncWrapper(
         _FakeSyncStream(chunks=["a"]), invocation=invocation
     )
-    with patch("timeit.default_timer", side_effect=iter([10.0])):
-        assert list(wrapper) == ["a"]
+    assert list(wrapper) == ["a"]
 
-    assert invocation.chunk_times == pytest.approx([10.0])
+    assert invocation.chunk_times == []
     assert not hasattr(invocation, "_request_stream")
 
 
@@ -789,17 +790,16 @@ def test_async_wrapper_reports_each_chunk_arrival():
     asyncio.run(exercise())
 
 
-def test_async_wrapper_works_without_request_stream():
+def test_async_wrapper_skips_stream_telemetry_without_flag():
     async def exercise():
-        invocation = _ProtocolOnlyTimingInvocation()
+        invocation = _UnflaggedTimingInvocation()
         stream = _FakeAsyncStream(chunks=["x"])
         wrapper = _TimingAsyncWrapper(stream, invocation=invocation)
 
-        with patch("timeit.default_timer", side_effect=iter([20.0])):
-            chunks = [chunk async for chunk in wrapper]
+        chunks = [chunk async for chunk in wrapper]
 
         assert chunks == ["x"]
-        assert invocation.chunk_times == pytest.approx([20.0])
+        assert invocation.chunk_times == []
         assert not hasattr(invocation, "_request_stream")
 
     asyncio.run(exercise())
@@ -1242,6 +1242,8 @@ async def test_finalize_on_aclose_runs_inside_execution_context(close_error):
 
 
 class _FakeInvocation:
+    _records_stream_telemetry = True
+
     def __init__(self):
         self.stop_count = 0
         self.failures = []
