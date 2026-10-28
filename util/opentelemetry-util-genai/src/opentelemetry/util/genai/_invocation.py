@@ -362,7 +362,7 @@ class GenAIInvocation(AbstractContextManager["GenAIInvocation"]):
     def record_stream_chunk(self) -> None:
         """Record one output chunk arriving.
 
-        .. deprecated:: 1.3b0
+        .. deprecated:: 1.4b0
             Only ``InferenceInvocation`` records stream chunks. On other
             invocation types this is a no-op, since semconv defines chunk
             timing for inference only.

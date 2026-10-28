@@ -919,7 +919,7 @@ class TestAgentInvocationMetrics(TestBase):
         )
         self.assertAlmostEqual(duration_point.sum, 1.0, places=3)
 
-    def test_remote_agent_streaming_metrics(self) -> None:
+    def test_remote_agent_records_no_streaming_metrics(self) -> None:
         handler = TelemetryHandler(
             tracer_provider=self.tracer_provider,
             meter_provider=self.meter_provider,
@@ -928,8 +928,12 @@ class TestAgentInvocationMetrics(TestBase):
             inv.record_stream_chunk()
             inv.record_stream_chunk()
         metrics = self._harvest_metrics()
-        self.assertIn("gen_ai.client.operation.time_to_first_chunk", metrics)
-        self.assertIn("gen_ai.client.operation.time_per_output_chunk", metrics)
+        self.assertNotIn(
+            "gen_ai.client.operation.time_to_first_chunk", metrics
+        )
+        self.assertNotIn(
+            "gen_ai.client.operation.time_per_output_chunk", metrics
+        )
 
     def test_agent_records_inference_and_tool_calls(self) -> None:
         handler = TelemetryHandler(
