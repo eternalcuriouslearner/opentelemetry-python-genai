@@ -8,7 +8,7 @@ opentelemetry-api @ git+https://github.com/open-telemetry/opentelemetry-python@2
 opentelemetry-sdk @ git+https://github.com/open-telemetry/opentelemetry-python@2fa016b27d9b817aee88ea58be1bd0bc10fd2a40#subdirectory=opentelemetry-sdk
 opentelemetry-semantic-conventions @ git+https://github.com/open-telemetry/opentelemetry-python@2fa016b27d9b817aee88ea58be1bd0bc10fd2a40#subdirectory=opentelemetry-semantic-conventions
 opentelemetry-test-utils @ git+https://github.com/open-telemetry/opentelemetry-python@2fa016b27d9b817aee88ea58be1bd0bc10fd2a40#subdirectory=tests/opentelemetry-test-utils
-opentelemetry-instrumentation @ git+https://github.com/open-telemetry/opentelemetry-python-contrib@a22d03307b27d958ca9dc340a3514ae1898f63e7#subdirectory=opentelemetry-instrumentation
+opentelemetry-instrumentation @ git+https://github.com/open-telemetry/opentelemetry-python-contrib@270d4b024ed8a8e3ce271641ebf7db651a3298c4#subdirectory=opentelemetry-instrumentation
 opentelemetry-exporter-otlp-proto-grpc @ git+https://github.com/open-telemetry/opentelemetry-python@2fa016b27d9b817aee88ea58be1bd0bc10fd2a40#subdirectory=exporter/opentelemetry-exporter-otlp-proto-grpc
 opentelemetry-exporter-otlp-proto-common @ git+https://github.com/open-telemetry/opentelemetry-python@2fa016b27d9b817aee88ea58be1bd0bc10fd2a40#subdirectory=exporter/opentelemetry-exporter-otlp-proto-common
 opentelemetry-proto @ git+https://github.com/open-telemetry/opentelemetry-python@2fa016b27d9b817aee88ea58be1bd0bc10fd2a40#subdirectory=opentelemetry-proto
@@ -17,3 +17,5 @@ opentelemetry-proto @ git+https://github.com/open-telemetry/opentelemetry-python
 # dependency); pin it from the same commit so the stack stays resolvable.
 opentelemetry-exporter-otlp @ git+https://github.com/open-telemetry/opentelemetry-python@2fa016b27d9b817aee88ea58be1bd0bc10fd2a40#subdirectory=exporter/opentelemetry-exporter-otlp
 opentelemetry-exporter-otlp-proto-http @ git+https://github.com/open-telemetry/opentelemetry-python@2fa016b27d9b817aee88ea58be1bd0bc10fd2a40#subdirectory=exporter/opentelemetry-exporter-otlp-proto-http
+opentelemetry-exporter-otlp-common @ git+https://github.com/open-telemetry/opentelemetry-python@2fa016b27d9b817aee88ea58be1bd0bc10fd2a40#subdirectory=exporter/opentelemetry-exporter-otlp-common
+opentelemetry-exporter-http-transport @ git+https://github.com/open-telemetry/opentelemetry-python@2fa016b27d9b817aee88ea58be1bd0bc10fd2a40#subdirectory=exporter/opentelemetry-exporter-http-transport

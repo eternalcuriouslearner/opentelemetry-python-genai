@@ -214,13 +214,50 @@ def run_conformance(
         report = weaver.end(timeout=120)
         _dump_report(scenario, report)
 
-        _check_violations(scenario, report)
-        scenario.validate(report)
+        _experiment_collect_all(scenario, report)
         return report
     finally:
         tracer_provider.shutdown()
         meter_provider.shutdown()
         logger_provider.shutdown()
+
+
+def _experiment_collect_all(scenario: Scenario, report: LiveCheckReport) -> None:
+    # EXPERIMENT ONLY (semconv pin-bump investigation): report every failure
+    # category instead of stopping at the first one, and dump a JSON summary.
+    import os  # noqa: PLC0415
+
+    violations = report.violations
+    expected = scenario.expected_violations
+    unexpected = [
+        v for v in violations if not any(ev.matches(v) for ev in expected)
+    ]
+    unmet = [
+        {"advice_id": ev.advice_id, "message_substring": ev.message_substring}
+        for ev in expected
+        if not any(ev.matches(v) for v in violations)
+    ]
+    validate_error = None
+    try:
+        scenario.validate(report)
+    except AssertionError as exc:
+        validate_error = str(exc)
+    result = {
+        "scenario": type(scenario).__name__,
+        "module": type(scenario).__module__,
+        "unexpected": unexpected,
+        "unmet_expected": unmet,
+        "validate_error": validate_error,
+    }
+    out_dir = os.environ.get("OTEL_CONF_RESULTS_DIR")
+    if out_dir:
+        out = Path(out_dir) / f"{os.environ.get('OTEL_CONF_ENV', 'env')}__{type(scenario).__name__}.json"
+        out.parent.mkdir(parents=True, exist_ok=True)
+        out.write_text(json.dumps(result, indent=2, default=str))
+    if unexpected or unmet or validate_error:
+        raise AssertionError(
+            "CONFORMANCE_RESULT " + json.dumps(result, default=str)
+        )
 
 
 def _check_violations(scenario: Scenario, report: LiveCheckReport) -> None:
