@@ -1,0 +1,24 @@
+{
+  "scenario": "RetrieveAndGenerateStreamingScenario",
+  "module": "tests.conformance.retrieve_and_generate_streaming",
+  "unexpected": [
+    {
+      "id": "missing_metric",
+      "message": "Metric does not exist in the registry.",
+      "context": null,
+      "signal_name": "gen_ai.client.operation.time_to_first_chunk",
+      "signal_type": "metric",
+      "count": 1
+    },
+    {
+      "id": "missing_metric",
+      "message": "Metric does not exist in the registry.",
+      "context": null,
+      "signal_name": "gen_ai.client.operation.time_per_output_chunk",
+      "signal_type": "metric",
+      "count": 1
+    }
+  ],
+  "unmet_expected": [],
+  "validate_error": null
+}

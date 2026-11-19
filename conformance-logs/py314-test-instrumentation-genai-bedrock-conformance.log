@@ -1,0 +1,574 @@
+py314-test-instrumentation-genai-bedrock-conformance: venv> .venv/bin/uv venv -p cpython3.14 --allow-existing '--prompt=agent-aacd31ae87ecdff9e[py314-test-instrumentation-genai-bedrock-conformance]' --python-preference system /Users/tejamvsr/opensource/opentelemetry-python-genai/.claude/worktrees/agent-aacd31ae87ecdff9e/.tox/py314-test-instrumentation-genai-bedrock-conformance
+py314-test-instrumentation-genai-bedrock-conformance: install_deps> .venv/bin/uv pip install 'pytest-asyncio>=0.24' 'pytest-vcr>=1.0.2' 'pytest>=8' -e util/opentelemetry-test-util-genai -r /Users/tejamvsr/opensource/opentelemetry-python-genai/.claude/worktrees/agent-aacd31ae87ecdff9e/dev-requirements-conformance.txt -r /Users/tejamvsr/opensource/opentelemetry-python-genai/.claude/worktrees/agent-aacd31ae87ecdff9e/instrumentation/opentelemetry-instrumentation-genai-bedrock/tests/requirements.latest.txt
+py314-test-instrumentation-genai-bedrock-conformance: commands[0]> pytest /Users/tejamvsr/opensource/opentelemetry-python-genai/.claude/worktrees/agent-aacd31ae87ecdff9e/instrumentation/opentelemetry-instrumentation-genai-bedrock/tests/test_conformance.py --vcr-record=none -q -rs -p no:cacheprovider
+/Users/tejamvsr/opensource/opentelemetry-python-genai/.claude/worktrees/agent-aacd31ae87ecdff9e/.tox/py314-test-instrumentation-genai-bedrock-conformance/lib/python3.14/site-packages/pytest_asyncio/plugin.py:306: PytestDeprecationWarning: The configuration option "asyncio_default_fixture_loop_scope" is unset.
+The event loop scope for asynchronous fixtures will default to the fixture scope. Future versions of pytest-asyncio will default the loop scope for asynchronous fixtures to "function" scope. Set the default fixture loop scope explicitly in order to avoid unexpected behavior in the future. Valid fixture loop scopes are: "function", "class", "module", "package", "session". Set it to "fixture-scope" to keep the current behavior.
+
+  warnings.warn(PytestDeprecationWarning(_DEFAULT_FIXTURE_LOOP_SCOPE_UNSET))
+FFFFFF....F                                                              [100%]
+=================================== FAILURES ===================================
+_____________________ test_conformance[InferenceScenario] ______________________
+
+scenario = <tests.conformance.inference.InferenceScenario object at 0x10cd09be0>
+vcr = <vcr.config.VCR object at 0x10ccd3750>
+weaver_live_check = <opentelemetry.test.weaver_live_check.WeaverLiveCheck object at 0x10f2fe270>
+
+    @pytest.mark.parametrize(
+        "scenario",
+        [
+            InferenceScenario(),
+            InferenceStreamingScenario(),
+            ToolCallingScenario(),
+            InvokeModelScenario(),
+            InvokeModelStreamingScenario(),
+            EmbeddingScenario(),
+            InvokeAgentScenario(),
+            InvokeInlineAgentScenario(),
+            RetrieveScenario(),
+            RetrieveAndGenerateScenario(),
+            RetrieveAndGenerateStreamingScenario(),
+        ],
+        ids=lambda s: type(s).__name__,
+    )
+    def test_conformance(
+        scenario: Scenario, vcr: Any, weaver_live_check: WeaverLiveCheck
+    ) -> None:
+>       run_conformance(scenario, vcr=vcr, weaver=weaver_live_check)
+
+instrumentation/opentelemetry-instrumentation-genai-bedrock/tests/test_conformance.py:56: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+util/opentelemetry-test-util-genai/src/opentelemetry/test_util_genai/conformance.py:217: in run_conformance
+    _experiment_collect_all(scenario, report)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+scenario = <tests.conformance.inference.InferenceScenario object at 0x10cd09be0>
+report = LiveCheckReport(4 violations)
+
+    def _experiment_collect_all(scenario: Scenario, report: LiveCheckReport) -> None:
+        # EXPERIMENT ONLY (semconv pin-bump investigation): report every failure
+        # category instead of stopping at the first one, and dump a JSON summary.
+        import os  # noqa: PLC0415
+    
+        violations = report.violations
+        expected = scenario.expected_violations
+        unexpected = [
+            v for v in violations if not any(ev.matches(v) for ev in expected)
+        ]
+        unmet = [
+            {"advice_id": ev.advice_id, "message_substring": ev.message_substring}
+            for ev in expected
+            if not any(ev.matches(v) for v in violations)
+        ]
+        validate_error = None
+        try:
+            scenario.validate(report)
+        except AssertionError as exc:
+            validate_error = str(exc)
+        result = {
+            "scenario": type(scenario).__name__,
+            "module": type(scenario).__module__,
+            "unexpected": unexpected,
+            "unmet_expected": unmet,
+            "validate_error": validate_error,
+        }
+        out_dir = os.environ.get("OTEL_CONF_RESULTS_DIR")
+        if out_dir:
+            out = Path(out_dir) / f"{os.environ.get('OTEL_CONF_ENV', 'env')}__{type(scenario).__name__}.json"
+            out.parent.mkdir(parents=True, exist_ok=True)
+            out.write_text(json.dumps(result, indent=2, default=str))
+        if unexpected or unmet or validate_error:
+>           raise AssertionError(
+                "CONFORMANCE_RESULT " + json.dumps(result, default=str)
+            )
+E           AssertionError: CONFORMANCE_RESULT {"scenario": "InferenceScenario", "module": "tests.conformance.inference", "unexpected": [{"id": "missing_attribute", "message": "Attribute 'gen_ai.token.type' does not exist in the registry.", "context": {"attribute_key": "gen_ai.token.type"}, "signal_name": "gen_ai.client.token.usage", "signal_type": "metric", "count": 2}, {"id": "missing_metric", "message": "Metric does not exist in the registry.", "context": null, "signal_name": "gen_ai.client.token.usage", "signal_type": "metric", "count": 1}], "unmet_expected": [], "validate_error": "Expected metrics ['gen_ai.client.operation.duration', 'gen_ai.client.token.usage'] but weaver only saw ['gen_ai.client.operation.duration'] \u2014 missing ['gen_ai.client.token.usage']"}
+
+util/opentelemetry-test-util-genai/src/opentelemetry/test_util_genai/conformance.py:258: AssertionError
+------------------------------ Captured log call -------------------------------
+WARNING  opentelemetry.exporter.otlp.proto.grpc.exporter:exporter.py:486 Transient error StatusCode.UNAVAILABLE encountered while exporting metrics to localhost:62662, retrying in 1.17s. Error details: failed to connect to all addresses; last error: UNKNOWN: ipv4:127.0.0.1:62662: Failed to connect to remote host: Connection refused
+ERROR    opentelemetry.exporter.otlp.proto.grpc.exporter:exporter.py:475 Failed to export metrics to localhost:62662, error code: StatusCode.UNAVAILABLE, error details: failed to connect to all addresses; last error: UNKNOWN: ipv4:127.0.0.1:62662: Failed to connect to remote host: Connection refused
+_________________ test_conformance[InferenceStreamingScenario] _________________
+
+scenario = <tests.conformance.inference_streaming.InferenceStreamingScenario object at 0x10cd0a660>
+vcr = <vcr.config.VCR object at 0x10ccd3750>
+weaver_live_check = <opentelemetry.test.weaver_live_check.WeaverLiveCheck object at 0x110877890>
+
+    @pytest.mark.parametrize(
+        "scenario",
+        [
+            InferenceScenario(),
+            InferenceStreamingScenario(),
+            ToolCallingScenario(),
+            InvokeModelScenario(),
+            InvokeModelStreamingScenario(),
+            EmbeddingScenario(),
+            InvokeAgentScenario(),
+            InvokeInlineAgentScenario(),
+            RetrieveScenario(),
+            RetrieveAndGenerateScenario(),
+            RetrieveAndGenerateStreamingScenario(),
+        ],
+        ids=lambda s: type(s).__name__,
+    )
+    def test_conformance(
+        scenario: Scenario, vcr: Any, weaver_live_check: WeaverLiveCheck
+    ) -> None:
+>       run_conformance(scenario, vcr=vcr, weaver=weaver_live_check)
+
+instrumentation/opentelemetry-instrumentation-genai-bedrock/tests/test_conformance.py:56: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+util/opentelemetry-test-util-genai/src/opentelemetry/test_util_genai/conformance.py:217: in run_conformance
+    _experiment_collect_all(scenario, report)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+scenario = <tests.conformance.inference_streaming.InferenceStreamingScenario object at 0x10cd0a660>
+report = LiveCheckReport(6 violations)
+
+    def _experiment_collect_all(scenario: Scenario, report: LiveCheckReport) -> None:
+        # EXPERIMENT ONLY (semconv pin-bump investigation): report every failure
+        # category instead of stopping at the first one, and dump a JSON summary.
+        import os  # noqa: PLC0415
+    
+        violations = report.violations
+        expected = scenario.expected_violations
+        unexpected = [
+            v for v in violations if not any(ev.matches(v) for ev in expected)
+        ]
+        unmet = [
+            {"advice_id": ev.advice_id, "message_substring": ev.message_substring}
+            for ev in expected
+            if not any(ev.matches(v) for v in violations)
+        ]
+        validate_error = None
+        try:
+            scenario.validate(report)
+        except AssertionError as exc:
+            validate_error = str(exc)
+        result = {
+            "scenario": type(scenario).__name__,
+            "module": type(scenario).__module__,
+            "unexpected": unexpected,
+            "unmet_expected": unmet,
+            "validate_error": validate_error,
+        }
+        out_dir = os.environ.get("OTEL_CONF_RESULTS_DIR")
+        if out_dir:
+            out = Path(out_dir) / f"{os.environ.get('OTEL_CONF_ENV', 'env')}__{type(scenario).__name__}.json"
+            out.parent.mkdir(parents=True, exist_ok=True)
+            out.write_text(json.dumps(result, indent=2, default=str))
+        if unexpected or unmet or validate_error:
+>           raise AssertionError(
+                "CONFORMANCE_RESULT " + json.dumps(result, default=str)
+            )
+E           AssertionError: CONFORMANCE_RESULT {"scenario": "InferenceStreamingScenario", "module": "tests.conformance.inference_streaming", "unexpected": [{"id": "missing_attribute", "message": "Attribute 'gen_ai.token.type' does not exist in the registry.", "context": {"attribute_key": "gen_ai.token.type"}, "signal_name": "gen_ai.client.token.usage", "signal_type": "metric", "count": 2}, {"id": "missing_metric", "message": "Metric does not exist in the registry.", "context": null, "signal_name": "gen_ai.client.operation.time_to_first_chunk", "signal_type": "metric", "count": 1}, {"id": "missing_metric", "message": "Metric does not exist in the registry.", "context": null, "signal_name": "gen_ai.client.operation.time_per_output_chunk", "signal_type": "metric", "count": 1}, {"id": "missing_metric", "message": "Metric does not exist in the registry.", "context": null, "signal_name": "gen_ai.client.token.usage", "signal_type": "metric", "count": 1}], "unmet_expected": [], "validate_error": "Expected metrics ['gen_ai.client.operation.duration', 'gen_ai.client.operation.time_per_output_chunk', 'gen_ai.client.operation.time_to_first_chunk', 'gen_ai.client.token.usage'] but weaver only saw ['gen_ai.client.operation.duration'] \u2014 missing ['gen_ai.client.operation.time_per_output_chunk', 'gen_ai.client.operation.time_to_first_chunk', 'gen_ai.client.token.usage']"}
+
+util/opentelemetry-test-util-genai/src/opentelemetry/test_util_genai/conformance.py:258: AssertionError
+------------------------------ Captured log call -------------------------------
+WARNING  opentelemetry.exporter.otlp.proto.grpc.exporter:exporter.py:486 Transient error StatusCode.UNAVAILABLE encountered while exporting metrics to localhost:62689, retrying in 1.20s. Error details: failed to connect to all addresses; last error: UNKNOWN: ipv4:127.0.0.1:62689: Failed to connect to remote host: Connection refused
+WARNING  opentelemetry.exporter.otlp.proto.grpc.exporter:exporter.py:486 Transient error StatusCode.UNAVAILABLE encountered while exporting metrics to localhost:62689, retrying in 3.81s. Error details: failed to connect to all addresses; last error: UNKNOWN: ipv6:%5B::1%5D:62689: Failed to connect to remote host: Connection refused
+ERROR    opentelemetry.exporter.otlp.proto.grpc.exporter:exporter.py:475 Failed to export metrics to localhost:62689, error code: StatusCode.UNAVAILABLE, error details: failed to connect to all addresses; last error: UNKNOWN: ipv6:%5B::1%5D:62689: Failed to connect to remote host: Connection refused
+____________________ test_conformance[ToolCallingScenario] _____________________
+
+scenario = <tests.conformance.tool_calling.ToolCallingScenario object at 0x10cd0a7b0>
+vcr = <vcr.config.VCR object at 0x10ccd3750>
+weaver_live_check = <opentelemetry.test.weaver_live_check.WeaverLiveCheck object at 0x1110e5d10>
+
+    @pytest.mark.parametrize(
+        "scenario",
+        [
+            InferenceScenario(),
+            InferenceStreamingScenario(),
+            ToolCallingScenario(),
+            InvokeModelScenario(),
+            InvokeModelStreamingScenario(),
+            EmbeddingScenario(),
+            InvokeAgentScenario(),
+            InvokeInlineAgentScenario(),
+            RetrieveScenario(),
+            RetrieveAndGenerateScenario(),
+            RetrieveAndGenerateStreamingScenario(),
+        ],
+        ids=lambda s: type(s).__name__,
+    )
+    def test_conformance(
+        scenario: Scenario, vcr: Any, weaver_live_check: WeaverLiveCheck
+    ) -> None:
+>       run_conformance(scenario, vcr=vcr, weaver=weaver_live_check)
+
+instrumentation/opentelemetry-instrumentation-genai-bedrock/tests/test_conformance.py:56: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+util/opentelemetry-test-util-genai/src/opentelemetry/test_util_genai/conformance.py:217: in run_conformance
+    _experiment_collect_all(scenario, report)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+scenario = <tests.conformance.tool_calling.ToolCallingScenario object at 0x10cd0a7b0>
+report = LiveCheckReport(4 violations)
+
+    def _experiment_collect_all(scenario: Scenario, report: LiveCheckReport) -> None:
+        # EXPERIMENT ONLY (semconv pin-bump investigation): report every failure
+        # category instead of stopping at the first one, and dump a JSON summary.
+        import os  # noqa: PLC0415
+    
+        violations = report.violations
+        expected = scenario.expected_violations
+        unexpected = [
+            v for v in violations if not any(ev.matches(v) for ev in expected)
+        ]
+        unmet = [
+            {"advice_id": ev.advice_id, "message_substring": ev.message_substring}
+            for ev in expected
+            if not any(ev.matches(v) for v in violations)
+        ]
+        validate_error = None
+        try:
+            scenario.validate(report)
+        except AssertionError as exc:
+            validate_error = str(exc)
+        result = {
+            "scenario": type(scenario).__name__,
+            "module": type(scenario).__module__,
+            "unexpected": unexpected,
+            "unmet_expected": unmet,
+            "validate_error": validate_error,
+        }
+        out_dir = os.environ.get("OTEL_CONF_RESULTS_DIR")
+        if out_dir:
+            out = Path(out_dir) / f"{os.environ.get('OTEL_CONF_ENV', 'env')}__{type(scenario).__name__}.json"
+            out.parent.mkdir(parents=True, exist_ok=True)
+            out.write_text(json.dumps(result, indent=2, default=str))
+        if unexpected or unmet or validate_error:
+>           raise AssertionError(
+                "CONFORMANCE_RESULT " + json.dumps(result, default=str)
+            )
+E           AssertionError: CONFORMANCE_RESULT {"scenario": "ToolCallingScenario", "module": "tests.conformance.tool_calling", "unexpected": [{"id": "missing_attribute", "message": "Attribute 'gen_ai.token.type' does not exist in the registry.", "context": {"attribute_key": "gen_ai.token.type"}, "signal_name": "gen_ai.client.token.usage", "signal_type": "metric", "count": 2}, {"id": "missing_metric", "message": "Metric does not exist in the registry.", "context": null, "signal_name": "gen_ai.client.token.usage", "signal_type": "metric", "count": 1}], "unmet_expected": [], "validate_error": "Expected metrics ['gen_ai.client.operation.duration', 'gen_ai.client.token.usage'] but weaver only saw ['gen_ai.client.operation.duration'] \u2014 missing ['gen_ai.client.token.usage']"}
+
+util/opentelemetry-test-util-genai/src/opentelemetry/test_util_genai/conformance.py:258: AssertionError
+------------------------------ Captured log call -------------------------------
+WARNING  opentelemetry.exporter.otlp.proto.grpc.exporter:exporter.py:486 Transient error StatusCode.UNAVAILABLE encountered while exporting metrics to localhost:62708, retrying in 0.96s. Error details: failed to connect to all addresses; last error: UNKNOWN: ipv4:127.0.0.1:62708: Failed to connect to remote host: Connection refused
+ERROR    opentelemetry.exporter.otlp.proto.grpc.exporter:exporter.py:475 Failed to export metrics to localhost:62708, error code: StatusCode.UNAVAILABLE, error details: failed to connect to all addresses; last error: UNKNOWN: ipv4:127.0.0.1:62708: Failed to connect to remote host: Connection refused
+____________________ test_conformance[InvokeModelScenario] _____________________
+
+scenario = <tests.conformance.invoke_model.InvokeModelScenario object at 0x10cd0a900>
+vcr = <vcr.config.VCR object at 0x10ccd3750>
+weaver_live_check = <opentelemetry.test.weaver_live_check.WeaverLiveCheck object at 0x11110e780>
+
+    @pytest.mark.parametrize(
+        "scenario",
+        [
+            InferenceScenario(),
+            InferenceStreamingScenario(),
+            ToolCallingScenario(),
+            InvokeModelScenario(),
+            InvokeModelStreamingScenario(),
+            EmbeddingScenario(),
+            InvokeAgentScenario(),
+            InvokeInlineAgentScenario(),
+            RetrieveScenario(),
+            RetrieveAndGenerateScenario(),
+            RetrieveAndGenerateStreamingScenario(),
+        ],
+        ids=lambda s: type(s).__name__,
+    )
+    def test_conformance(
+        scenario: Scenario, vcr: Any, weaver_live_check: WeaverLiveCheck
+    ) -> None:
+>       run_conformance(scenario, vcr=vcr, weaver=weaver_live_check)
+
+instrumentation/opentelemetry-instrumentation-genai-bedrock/tests/test_conformance.py:56: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+util/opentelemetry-test-util-genai/src/opentelemetry/test_util_genai/conformance.py:217: in run_conformance
+    _experiment_collect_all(scenario, report)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+scenario = <tests.conformance.invoke_model.InvokeModelScenario object at 0x10cd0a900>
+report = LiveCheckReport(4 violations)
+
+    def _experiment_collect_all(scenario: Scenario, report: LiveCheckReport) -> None:
+        # EXPERIMENT ONLY (semconv pin-bump investigation): report every failure
+        # category instead of stopping at the first one, and dump a JSON summary.
+        import os  # noqa: PLC0415
+    
+        violations = report.violations
+        expected = scenario.expected_violations
+        unexpected = [
+            v for v in violations if not any(ev.matches(v) for ev in expected)
+        ]
+        unmet = [
+            {"advice_id": ev.advice_id, "message_substring": ev.message_substring}
+            for ev in expected
+            if not any(ev.matches(v) for v in violations)
+        ]
+        validate_error = None
+        try:
+            scenario.validate(report)
+        except AssertionError as exc:
+            validate_error = str(exc)
+        result = {
+            "scenario": type(scenario).__name__,
+            "module": type(scenario).__module__,
+            "unexpected": unexpected,
+            "unmet_expected": unmet,
+            "validate_error": validate_error,
+        }
+        out_dir = os.environ.get("OTEL_CONF_RESULTS_DIR")
+        if out_dir:
+            out = Path(out_dir) / f"{os.environ.get('OTEL_CONF_ENV', 'env')}__{type(scenario).__name__}.json"
+            out.parent.mkdir(parents=True, exist_ok=True)
+            out.write_text(json.dumps(result, indent=2, default=str))
+        if unexpected or unmet or validate_error:
+>           raise AssertionError(
+                "CONFORMANCE_RESULT " + json.dumps(result, default=str)
+            )
+E           AssertionError: CONFORMANCE_RESULT {"scenario": "InvokeModelScenario", "module": "tests.conformance.invoke_model", "unexpected": [{"id": "missing_attribute", "message": "Attribute 'gen_ai.token.type' does not exist in the registry.", "context": {"attribute_key": "gen_ai.token.type"}, "signal_name": "gen_ai.client.token.usage", "signal_type": "metric", "count": 2}, {"id": "missing_metric", "message": "Metric does not exist in the registry.", "context": null, "signal_name": "gen_ai.client.token.usage", "signal_type": "metric", "count": 1}], "unmet_expected": [], "validate_error": "Expected metrics ['gen_ai.client.operation.duration', 'gen_ai.client.token.usage'] but weaver only saw ['gen_ai.client.operation.duration'] \u2014 missing ['gen_ai.client.token.usage']"}
+
+util/opentelemetry-test-util-genai/src/opentelemetry/test_util_genai/conformance.py:258: AssertionError
+------------------------------ Captured log call -------------------------------
+WARNING  opentelemetry.exporter.otlp.proto.grpc.exporter:exporter.py:486 Transient error StatusCode.UNAVAILABLE encountered while exporting metrics to localhost:62728, retrying in 0.92s. Error details: failed to connect to all addresses; last error: UNKNOWN: ipv4:127.0.0.1:62728: Failed to connect to remote host: Connection refused
+ERROR    opentelemetry.exporter.otlp.proto.grpc.exporter:exporter.py:475 Failed to export metrics to localhost:62728, error code: StatusCode.UNAVAILABLE, error details: failed to connect to all addresses; last error: UNKNOWN: ipv6:%5B::1%5D:62728: Failed to connect to remote host: Connection refused
+________________ test_conformance[InvokeModelStreamingScenario] ________________
+
+scenario = <tests.conformance.invoke_model_streaming.InvokeModelStreamingScenario object at 0x10cd0aa50>
+vcr = <vcr.config.VCR object at 0x10ccd3750>
+weaver_live_check = <opentelemetry.test.weaver_live_check.WeaverLiveCheck object at 0x1111ca9e0>
+
+    @pytest.mark.parametrize(
+        "scenario",
+        [
+            InferenceScenario(),
+            InferenceStreamingScenario(),
+            ToolCallingScenario(),
+            InvokeModelScenario(),
+            InvokeModelStreamingScenario(),
+            EmbeddingScenario(),
+            InvokeAgentScenario(),
+            InvokeInlineAgentScenario(),
+            RetrieveScenario(),
+            RetrieveAndGenerateScenario(),
+            RetrieveAndGenerateStreamingScenario(),
+        ],
+        ids=lambda s: type(s).__name__,
+    )
+    def test_conformance(
+        scenario: Scenario, vcr: Any, weaver_live_check: WeaverLiveCheck
+    ) -> None:
+>       run_conformance(scenario, vcr=vcr, weaver=weaver_live_check)
+
+instrumentation/opentelemetry-instrumentation-genai-bedrock/tests/test_conformance.py:56: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+util/opentelemetry-test-util-genai/src/opentelemetry/test_util_genai/conformance.py:217: in run_conformance
+    _experiment_collect_all(scenario, report)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+scenario = <tests.conformance.invoke_model_streaming.InvokeModelStreamingScenario object at 0x10cd0aa50>
+report = LiveCheckReport(6 violations)
+
+    def _experiment_collect_all(scenario: Scenario, report: LiveCheckReport) -> None:
+        # EXPERIMENT ONLY (semconv pin-bump investigation): report every failure
+        # category instead of stopping at the first one, and dump a JSON summary.
+        import os  # noqa: PLC0415
+    
+        violations = report.violations
+        expected = scenario.expected_violations
+        unexpected = [
+            v for v in violations if not any(ev.matches(v) for ev in expected)
+        ]
+        unmet = [
+            {"advice_id": ev.advice_id, "message_substring": ev.message_substring}
+            for ev in expected
+            if not any(ev.matches(v) for v in violations)
+        ]
+        validate_error = None
+        try:
+            scenario.validate(report)
+        except AssertionError as exc:
+            validate_error = str(exc)
+        result = {
+            "scenario": type(scenario).__name__,
+            "module": type(scenario).__module__,
+            "unexpected": unexpected,
+            "unmet_expected": unmet,
+            "validate_error": validate_error,
+        }
+        out_dir = os.environ.get("OTEL_CONF_RESULTS_DIR")
+        if out_dir:
+            out = Path(out_dir) / f"{os.environ.get('OTEL_CONF_ENV', 'env')}__{type(scenario).__name__}.json"
+            out.parent.mkdir(parents=True, exist_ok=True)
+            out.write_text(json.dumps(result, indent=2, default=str))
+        if unexpected or unmet or validate_error:
+>           raise AssertionError(
+                "CONFORMANCE_RESULT " + json.dumps(result, default=str)
+            )
+E           AssertionError: CONFORMANCE_RESULT {"scenario": "InvokeModelStreamingScenario", "module": "tests.conformance.invoke_model_streaming", "unexpected": [{"id": "missing_attribute", "message": "Attribute 'gen_ai.token.type' does not exist in the registry.", "context": {"attribute_key": "gen_ai.token.type"}, "signal_name": "gen_ai.client.token.usage", "signal_type": "metric", "count": 2}, {"id": "missing_metric", "message": "Metric does not exist in the registry.", "context": null, "signal_name": "gen_ai.client.operation.time_to_first_chunk", "signal_type": "metric", "count": 1}, {"id": "missing_metric", "message": "Metric does not exist in the registry.", "context": null, "signal_name": "gen_ai.client.operation.time_per_output_chunk", "signal_type": "metric", "count": 1}, {"id": "missing_metric", "message": "Metric does not exist in the registry.", "context": null, "signal_name": "gen_ai.client.token.usage", "signal_type": "metric", "count": 1}], "unmet_expected": [], "validate_error": "Expected metrics ['gen_ai.client.operation.duration', 'gen_ai.client.operation.time_per_output_chunk', 'gen_ai.client.operation.time_to_first_chunk', 'gen_ai.client.token.usage'] but weaver only saw ['gen_ai.client.operation.duration'] \u2014 missing ['gen_ai.client.operation.time_per_output_chunk', 'gen_ai.client.operation.time_to_first_chunk', 'gen_ai.client.token.usage']"}
+
+util/opentelemetry-test-util-genai/src/opentelemetry/test_util_genai/conformance.py:258: AssertionError
+------------------------------ Captured log call -------------------------------
+WARNING  opentelemetry.exporter.otlp.proto.grpc.exporter:exporter.py:486 Transient error StatusCode.UNAVAILABLE encountered while exporting metrics to localhost:62748, retrying in 1.00s. Error details: failed to connect to all addresses; last error: UNKNOWN: ipv4:127.0.0.1:62748: Failed to connect to remote host: Connection refused
+WARNING  opentelemetry.exporter.otlp.proto.grpc.exporter:exporter.py:486 Transient error StatusCode.UNAVAILABLE encountered while exporting metrics to localhost:62748, retrying in 1.85s. Error details: failed to connect to all addresses; last error: UNKNOWN: ipv4:127.0.0.1:62748: Failed to connect to remote host: Connection refused
+ERROR    opentelemetry.exporter.otlp.proto.grpc.exporter:exporter.py:475 Failed to export metrics to localhost:62748, error code: StatusCode.UNAVAILABLE, error details: failed to connect to all addresses; last error: UNKNOWN: ipv4:127.0.0.1:62748: Failed to connect to remote host: Connection refused
+_____________________ test_conformance[EmbeddingScenario] ______________________
+
+scenario = <tests.conformance.embedding.EmbeddingScenario object at 0x10cd0aba0>
+vcr = <vcr.config.VCR object at 0x10ccd3750>
+weaver_live_check = <opentelemetry.test.weaver_live_check.WeaverLiveCheck object at 0x11120c170>
+
+    @pytest.mark.parametrize(
+        "scenario",
+        [
+            InferenceScenario(),
+            InferenceStreamingScenario(),
+            ToolCallingScenario(),
+            InvokeModelScenario(),
+            InvokeModelStreamingScenario(),
+            EmbeddingScenario(),
+            InvokeAgentScenario(),
+            InvokeInlineAgentScenario(),
+            RetrieveScenario(),
+            RetrieveAndGenerateScenario(),
+            RetrieveAndGenerateStreamingScenario(),
+        ],
+        ids=lambda s: type(s).__name__,
+    )
+    def test_conformance(
+        scenario: Scenario, vcr: Any, weaver_live_check: WeaverLiveCheck
+    ) -> None:
+>       run_conformance(scenario, vcr=vcr, weaver=weaver_live_check)
+
+instrumentation/opentelemetry-instrumentation-genai-bedrock/tests/test_conformance.py:56: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+util/opentelemetry-test-util-genai/src/opentelemetry/test_util_genai/conformance.py:217: in run_conformance
+    _experiment_collect_all(scenario, report)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+scenario = <tests.conformance.embedding.EmbeddingScenario object at 0x10cd0aba0>
+report = LiveCheckReport(3 violations)
+
+    def _experiment_collect_all(scenario: Scenario, report: LiveCheckReport) -> None:
+        # EXPERIMENT ONLY (semconv pin-bump investigation): report every failure
+        # category instead of stopping at the first one, and dump a JSON summary.
+        import os  # noqa: PLC0415
+    
+        violations = report.violations
+        expected = scenario.expected_violations
+        unexpected = [
+            v for v in violations if not any(ev.matches(v) for ev in expected)
+        ]
+        unmet = [
+            {"advice_id": ev.advice_id, "message_substring": ev.message_substring}
+            for ev in expected
+            if not any(ev.matches(v) for v in violations)
+        ]
+        validate_error = None
+        try:
+            scenario.validate(report)
+        except AssertionError as exc:
+            validate_error = str(exc)
+        result = {
+            "scenario": type(scenario).__name__,
+            "module": type(scenario).__module__,
+            "unexpected": unexpected,
+            "unmet_expected": unmet,
+            "validate_error": validate_error,
+        }
+        out_dir = os.environ.get("OTEL_CONF_RESULTS_DIR")
+        if out_dir:
+            out = Path(out_dir) / f"{os.environ.get('OTEL_CONF_ENV', 'env')}__{type(scenario).__name__}.json"
+            out.parent.mkdir(parents=True, exist_ok=True)
+            out.write_text(json.dumps(result, indent=2, default=str))
+        if unexpected or unmet or validate_error:
+>           raise AssertionError(
+                "CONFORMANCE_RESULT " + json.dumps(result, default=str)
+            )
+E           AssertionError: CONFORMANCE_RESULT {"scenario": "EmbeddingScenario", "module": "tests.conformance.embedding", "unexpected": [{"id": "missing_attribute", "message": "Attribute 'gen_ai.token.type' does not exist in the registry.", "context": {"attribute_key": "gen_ai.token.type"}, "signal_name": "gen_ai.client.token.usage", "signal_type": "metric", "count": 1}, {"id": "missing_metric", "message": "Metric does not exist in the registry.", "context": null, "signal_name": "gen_ai.client.token.usage", "signal_type": "metric", "count": 1}], "unmet_expected": [], "validate_error": "Expected metrics ['gen_ai.client.operation.duration', 'gen_ai.client.token.usage'] but weaver only saw ['gen_ai.client.operation.duration'] \u2014 missing ['gen_ai.client.token.usage']"}
+
+util/opentelemetry-test-util-genai/src/opentelemetry/test_util_genai/conformance.py:258: AssertionError
+------------------------------ Captured log call -------------------------------
+WARNING  opentelemetry.exporter.otlp.proto.grpc.exporter:exporter.py:486 Transient error StatusCode.UNAVAILABLE encountered while exporting metrics to localhost:62767, retrying in 0.81s. Error details: failed to connect to all addresses; last error: UNKNOWN: ipv4:127.0.0.1:62767: Failed to connect to remote host: Connection refused
+ERROR    opentelemetry.exporter.otlp.proto.grpc.exporter:exporter.py:475 Failed to export metrics to localhost:62767, error code: StatusCode.UNAVAILABLE, error details: failed to connect to all addresses; last error: UNKNOWN: ipv6:%5B::1%5D:62767: Failed to connect to remote host: Connection refused
+____________ test_conformance[RetrieveAndGenerateStreamingScenario] ____________
+
+scenario = <tests.conformance.retrieve_and_generate_streaming.RetrieveAndGenerateStreamingScenario object at 0x10cd0b230>
+vcr = <vcr.config.VCR object at 0x10ccd3750>
+weaver_live_check = <opentelemetry.test.weaver_live_check.WeaverLiveCheck object at 0x1114dea80>
+
+    @pytest.mark.parametrize(
+        "scenario",
+        [
+            InferenceScenario(),
+            InferenceStreamingScenario(),
+            ToolCallingScenario(),
+            InvokeModelScenario(),
+            InvokeModelStreamingScenario(),
+            EmbeddingScenario(),
+            InvokeAgentScenario(),
+            InvokeInlineAgentScenario(),
+            RetrieveScenario(),
+            RetrieveAndGenerateScenario(),
+            RetrieveAndGenerateStreamingScenario(),
+        ],
+        ids=lambda s: type(s).__name__,
+    )
+    def test_conformance(
+        scenario: Scenario, vcr: Any, weaver_live_check: WeaverLiveCheck
+    ) -> None:
+>       run_conformance(scenario, vcr=vcr, weaver=weaver_live_check)
+
+instrumentation/opentelemetry-instrumentation-genai-bedrock/tests/test_conformance.py:56: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+util/opentelemetry-test-util-genai/src/opentelemetry/test_util_genai/conformance.py:217: in run_conformance
+    _experiment_collect_all(scenario, report)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+scenario = <tests.conformance.retrieve_and_generate_streaming.RetrieveAndGenerateStreamingScenario object at 0x10cd0b230>
+report = LiveCheckReport(6 violations)
+
+    def _experiment_collect_all(scenario: Scenario, report: LiveCheckReport) -> None:
+        # EXPERIMENT ONLY (semconv pin-bump investigation): report every failure
+        # category instead of stopping at the first one, and dump a JSON summary.
+        import os  # noqa: PLC0415
+    
+        violations = report.violations
+        expected = scenario.expected_violations
+        unexpected = [
+            v for v in violations if not any(ev.matches(v) for ev in expected)
+        ]
+        unmet = [
+            {"advice_id": ev.advice_id, "message_substring": ev.message_substring}
+            for ev in expected
+            if not any(ev.matches(v) for v in violations)
+        ]
+        validate_error = None
+        try:
+            scenario.validate(report)
+        except AssertionError as exc:
+            validate_error = str(exc)
+        result = {
+            "scenario": type(scenario).__name__,
+            "module": type(scenario).__module__,
+            "unexpected": unexpected,
+            "unmet_expected": unmet,
+            "validate_error": validate_error,
+        }
+        out_dir = os.environ.get("OTEL_CONF_RESULTS_DIR")
+        if out_dir:
+            out = Path(out_dir) / f"{os.environ.get('OTEL_CONF_ENV', 'env')}__{type(scenario).__name__}.json"
+            out.parent.mkdir(parents=True, exist_ok=True)
+            out.write_text(json.dumps(result, indent=2, default=str))
+        if unexpected or unmet or validate_error:
+>           raise AssertionError(
+                "CONFORMANCE_RESULT " + json.dumps(result, default=str)
+            )
+E           AssertionError: CONFORMANCE_RESULT {"scenario": "RetrieveAndGenerateStreamingScenario", "module": "tests.conformance.retrieve_and_generate_streaming", "unexpected": [{"id": "missing_metric", "message": "Metric does not exist in the registry.", "context": null, "signal_name": "gen_ai.client.operation.time_to_first_chunk", "signal_type": "metric", "count": 1}, {"id": "missing_metric", "message": "Metric does not exist in the registry.", "context": null, "signal_name": "gen_ai.client.operation.time_per_output_chunk", "signal_type": "metric", "count": 1}], "unmet_expected": [], "validate_error": null}
+
+util/opentelemetry-test-util-genai/src/opentelemetry/test_util_genai/conformance.py:258: AssertionError
+------------------------------ Captured log call -------------------------------
+WARNING  opentelemetry.exporter.otlp.proto.grpc.exporter:exporter.py:486 Transient error StatusCode.UNAVAILABLE encountered while exporting metrics to localhost:62870, retrying in 0.87s. Error details: failed to connect to all addresses; last error: UNKNOWN: ipv4:127.0.0.1:62870: Failed to connect to remote host: Connection refused
+ERROR    opentelemetry.exporter.otlp.proto.grpc.exporter:exporter.py:475 Failed to export metrics to localhost:62870, error code: StatusCode.UNAVAILABLE, error details: failed to connect to all addresses; last error: UNKNOWN: ipv4:127.0.0.1:62870: Failed to connect to remote host: Connection refused
+=============================== warnings summary ===============================
+.tox/py314-test-instrumentation-genai-bedrock-conformance/lib/python3.14/site-packages/_pytest/config/__init__.py:915
+  /Users/tejamvsr/opensource/opentelemetry-python-genai/.claude/worktrees/agent-aacd31ae87ecdff9e/.tox/py314-test-instrumentation-genai-bedrock-conformance/lib/python3.14/site-packages/_pytest/config/__init__.py:915: PytestAssertRewriteWarning: Module already imported so cannot be rewritten; opentelemetry.test_util_genai.vcr
+    self.import_plugin(import_spec, consider_entry_points=True)
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+7 failed, 4 passed, 1 warning in 82.72s (0:01:22)
+py314-test-instrumentation-genai-bedrock-conformance: exit 1 (85.05 seconds) /Users/tejamvsr/opensource/opentelemetry-python-genai/.claude/worktrees/agent-aacd31ae87ecdff9e> pytest /Users/tejamvsr/opensource/opentelemetry-python-genai/.claude/worktrees/agent-aacd31ae87ecdff9e/instrumentation/opentelemetry-instrumentation-genai-bedrock/tests/test_conformance.py --vcr-record=none -q -rs -p no:cacheprovider pid=68184
+  py314-test-instrumentation-genai-bedrock-conformance: FAIL code 1 (87.78=setup[2.73]+cmd[85.05] seconds)
+  evaluation failed :( (87.86 seconds)

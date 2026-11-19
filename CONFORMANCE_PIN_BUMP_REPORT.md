@@ -15,3 +15,4 @@
 | py314-test-instrumentation-genai-agno-conformance | FAIL | 1 failed, 5 passed (48s) | only EmbeddingScenario fails (token.usage); 3 workflow scenarios pass, their #1103 workflow.name expectations still met |
 | py314-test-instrumentation-genai-smolagents-conformance | FAIL | 4 failed, 1 passed (38s) | token.usage + streaming chunk metric rename; AgentScenario passes |
 | py314-test-instrumentation-genai-anthropic-conformance | FAIL | 13 failed (102s) | token.usage + streaming chunk metric rename; nothing else |
+| py314-test-instrumentation-genai-bedrock-conformance | FAIL | 7 failed, 4 passed (83s) | token.usage + chunk metric rename; agent/retrieve scenarios pass |

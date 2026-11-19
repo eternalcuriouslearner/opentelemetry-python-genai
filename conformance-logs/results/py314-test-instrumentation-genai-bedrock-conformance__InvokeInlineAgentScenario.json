@@ -1,0 +1,7 @@
+{
+  "scenario": "InvokeInlineAgentScenario",
+  "module": "tests.conformance.invoke_inline_agent",
+  "unexpected": [],
+  "unmet_expected": [],
+  "validate_error": null
+}

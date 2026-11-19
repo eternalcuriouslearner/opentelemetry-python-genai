@@ -1,0 +1,7 @@
+{
+  "scenario": "RetrieveAndGenerateScenario",
+  "module": "tests.conformance.retrieve_and_generate",
+  "unexpected": [],
+  "unmet_expected": [],
+  "validate_error": null
+}
