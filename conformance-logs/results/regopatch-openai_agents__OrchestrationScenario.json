@@ -1,0 +1,16 @@
+{
+  "scenario": "OrchestrationScenario",
+  "module": "tests.conformance.orchestration",
+  "unexpected": [],
+  "unmet_expected": [
+    {
+      "advice_id": "genai_expected_attribute_missing",
+      "message_substring": "gen_ai.workflow.name"
+    },
+    {
+      "advice_id": "genai_span_name_format",
+      "message_substring": "gen_ai.workflow.name"
+    }
+  ],
+  "validate_error": null
+}

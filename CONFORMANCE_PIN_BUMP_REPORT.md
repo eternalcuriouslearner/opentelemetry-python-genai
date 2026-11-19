@@ -23,3 +23,6 @@
 | py314-test-instrumentation-genai-portkey-conformance | FAIL | 3 failed (25s) | token.usage + chunk rename only |
 | py314-test-instrumentation-genai-ollama-conformance | FAIL | 4 failed (30s) | token.usage only |
 | py313-test-instrumentation-genai-qwenpaw-conformance | PASS | 1 passed (16s) | InvokeAgentScenario |
+
+Rego re-check (policies/genai_span_validation.rego: invoke_workflow keyed/expected attr gen_ai.workflow.name -> gen_ai.agent.name, committed as experiment): with this change all 6 #1103 workflow scenarios (agno x3, langchain, llama_index, openai_agents) report both declared gen_ai.workflow.name ExpectedViolations as UNMET (declared but no longer seen), and no new violation appears. Logs: conformance-logs/regopatch-*.log
+

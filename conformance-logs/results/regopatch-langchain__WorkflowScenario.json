@@ -1,0 +1,35 @@
+{
+  "scenario": "WorkflowScenario",
+  "module": "tests.conformance.workflow",
+  "unexpected": [
+    {
+      "id": "missing_attribute",
+      "message": "Attribute 'gen_ai.token.type' does not exist in the registry.",
+      "context": {
+        "attribute_key": "gen_ai.token.type"
+      },
+      "signal_name": "gen_ai.client.token.usage",
+      "signal_type": "metric",
+      "count": 2
+    },
+    {
+      "id": "missing_metric",
+      "message": "Metric does not exist in the registry.",
+      "context": null,
+      "signal_name": "gen_ai.client.token.usage",
+      "signal_type": "metric",
+      "count": 1
+    }
+  ],
+  "unmet_expected": [
+    {
+      "advice_id": "genai_expected_attribute_missing",
+      "message_substring": "gen_ai.workflow.name"
+    },
+    {
+      "advice_id": "genai_span_name_format",
+      "message_substring": "gen_ai.workflow.name"
+    }
+  ],
+  "validate_error": "Expected metrics ['gen_ai.client.operation.duration', 'gen_ai.client.token.usage', 'gen_ai.invoke_agent.duration'] but weaver only saw ['gen_ai.client.operation.duration', 'gen_ai.invoke_agent.duration'] \u2014 missing ['gen_ai.client.token.usage']"
+}

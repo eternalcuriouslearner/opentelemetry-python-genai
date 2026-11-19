@@ -1,0 +1,112 @@
+py314-test-instrumentation-genai-llama_index-conformance: commands[0]> pytest /Users/tejamvsr/opensource/opentelemetry-python-genai/.claude/worktrees/agent-aacd31ae87ecdff9e/instrumentation/opentelemetry-instrumentation-genai-llama-index/tests/test_conformance.py --vcr-record=none -q -rs -p no:cacheprovider
+/Users/tejamvsr/opensource/opentelemetry-python-genai/.claude/worktrees/agent-aacd31ae87ecdff9e/.tox/py314-test-instrumentation-genai-llama_index-conformance/lib/python3.14/site-packages/pytest_asyncio/plugin.py:306: PytestDeprecationWarning: The configuration option "asyncio_default_fixture_loop_scope" is unset.
+The event loop scope for asynchronous fixtures will default to the fixture scope. Future versions of pytest-asyncio will default the loop scope for asynchronous fixtures to "function" scope. Set the default fixture loop scope explicitly in order to avoid unexpected behavior in the future. Valid fixture loop scopes are: "function", "class", "module", "package", "session". Set it to "fixture-scope" to keep the current behavior.
+
+  warnings.warn(PytestDeprecationWarning(_DEFAULT_FIXTURE_LOOP_SCOPE_UNSET))
+.F.                                                                      [100%]
+=================================== FAILURES ===================================
+______________________ test_conformance[WorkflowScenario] ______________________
+
+scenario = <tests.conformance.workflow.WorkflowScenario object at 0x111662270>
+vcr = <vcr.config.VCR object at 0x111758410>
+weaver_live_check = <opentelemetry.test.weaver_live_check.WeaverLiveCheck object at 0x113cebd90>
+
+    @pytest.mark.parametrize(
+        "scenario",
+        [AgentScenario(), WorkflowScenario(), RetrievalScenario()],
+        ids=lambda scenario: type(scenario).__name__,
+    )
+    def test_conformance(
+        scenario: Scenario, vcr: Any, weaver_live_check: WeaverLiveCheck
+    ) -> None:
+>       run_conformance(scenario, vcr=vcr, weaver=weaver_live_check)
+
+instrumentation/opentelemetry-instrumentation-genai-llama-index/tests/test_conformance.py:29: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+util/opentelemetry-test-util-genai/src/opentelemetry/test_util_genai/conformance.py:217: in run_conformance
+    _experiment_collect_all(scenario, report)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+scenario = <tests.conformance.workflow.WorkflowScenario object at 0x111662270>
+report = LiveCheckReport(0 violations)
+
+    def _experiment_collect_all(scenario: Scenario, report: LiveCheckReport) -> None:
+        # EXPERIMENT ONLY (semconv pin-bump investigation): report every failure
+        # category instead of stopping at the first one, and dump a JSON summary.
+        import os  # noqa: PLC0415
+    
+        violations = report.violations
+        expected = scenario.expected_violations
+        unexpected = [
+            v for v in violations if not any(ev.matches(v) for ev in expected)
+        ]
+        unmet = [
+            {"advice_id": ev.advice_id, "message_substring": ev.message_substring}
+            for ev in expected
+            if not any(ev.matches(v) for v in violations)
+        ]
+        validate_error = None
+        try:
+            scenario.validate(report)
+        except AssertionError as exc:
+            validate_error = str(exc)
+        result = {
+            "scenario": type(scenario).__name__,
+            "module": type(scenario).__module__,
+            "unexpected": unexpected,
+            "unmet_expected": unmet,
+            "validate_error": validate_error,
+        }
+        out_dir = os.environ.get("OTEL_CONF_RESULTS_DIR")
+        if out_dir:
+            out = Path(out_dir) / f"{os.environ.get('OTEL_CONF_ENV', 'env')}__{type(scenario).__name__}.json"
+            out.parent.mkdir(parents=True, exist_ok=True)
+            out.write_text(json.dumps(result, indent=2, default=str))
+        if unexpected or unmet or validate_error:
+>           raise AssertionError(
+                "CONFORMANCE_RESULT " + json.dumps(result, default=str)
+            )
+E           AssertionError: CONFORMANCE_RESULT {"scenario": "WorkflowScenario", "module": "tests.conformance.workflow", "unexpected": [], "unmet_expected": [{"advice_id": "genai_expected_attribute_missing", "message_substring": "gen_ai.workflow.name"}, {"advice_id": "genai_span_name_format", "message_substring": "gen_ai.workflow.name"}], "validate_error": null}
+
+util/opentelemetry-test-util-genai/src/opentelemetry/test_util_genai/conformance.py:258: AssertionError
+------------------------------ Captured log call -------------------------------
+WARNING  opentelemetry.exporter.otlp.proto.grpc.exporter:exporter.py:486 Transient error StatusCode.UNAVAILABLE encountered while exporting metrics to localhost:63827, retrying in 1.06s. Error details: failed to connect to all addresses; last error: UNKNOWN: ipv4:127.0.0.1:63827: Failed to connect to remote host: Connection refused
+ERROR    opentelemetry.exporter.otlp.proto.grpc.exporter:exporter.py:475 Failed to export metrics to localhost:63827, error code: StatusCode.UNAVAILABLE, error details: failed to connect to all addresses; last error: UNKNOWN: ipv6:%5B::1%5D:63827: Failed to connect to remote host: Connection refused
+=============================== warnings summary ===============================
+.tox/py314-test-instrumentation-genai-llama_index-conformance/lib/python3.14/site-packages/_pytest/config/__init__.py:915
+  /Users/tejamvsr/opensource/opentelemetry-python-genai/.claude/worktrees/agent-aacd31ae87ecdff9e/.tox/py314-test-instrumentation-genai-llama_index-conformance/lib/python3.14/site-packages/_pytest/config/__init__.py:915: PytestAssertRewriteWarning: Module already imported so cannot be rewritten; opentelemetry.test_util_genai.vcr
+    self.import_plugin(import_spec, consider_entry_points=True)
+
+tests/test_conformance.py: 40 warnings
+  /Users/tejamvsr/.local/share/uv/python/cpython-3.14.2-macos-aarch64-none/lib/python3.14/inspect.py:500: PydanticDeprecatedSince20: The `__fields__` attribute is deprecated, use the `model_fields` class property instead. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.14/migration/
+    value = getter(object, key)
+
+tests/test_conformance.py: 40 warnings
+  /Users/tejamvsr/.local/share/uv/python/cpython-3.14.2-macos-aarch64-none/lib/python3.14/inspect.py:500: PydanticDeprecatedSince20: The `__fields_set__` attribute is deprecated, use `model_fields_set` instead. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.14/migration/
+    value = getter(object, key)
+
+tests/test_conformance.py: 40 warnings
+  /Users/tejamvsr/.local/share/uv/python/cpython-3.14.2-macos-aarch64-none/lib/python3.14/inspect.py:500: PydanticDeprecatedSince211: Accessing the 'model_computed_fields' attribute on the instance is deprecated. Instead, you should access this attribute from the model class. Deprecated in Pydantic V2.11 to be removed in V3.0.
+    value = getter(object, key)
+
+tests/test_conformance.py: 40 warnings
+  /Users/tejamvsr/.local/share/uv/python/cpython-3.14.2-macos-aarch64-none/lib/python3.14/inspect.py:500: PydanticDeprecatedSince211: Accessing the 'model_fields' attribute on the instance is deprecated. Instead, you should access this attribute from the model class. Deprecated in Pydantic V2.11 to be removed in V3.0.
+    value = getter(object, key)
+
+tests/test_conformance.py: 26 warnings
+  /Users/tejamvsr/opensource/opentelemetry-python-genai/.claude/worktrees/agent-aacd31ae87ecdff9e/.tox/py314-test-instrumentation-genai-llama_index-conformance/lib/python3.14/site-packages/workflows/runtime/types/step_function.py:227: DeprecationWarning: 'asyncio.iscoroutinefunction' is deprecated and slated for removal in Python 3.16; use inspect.iscoroutinefunction() instead
+    if asyncio.iscoroutinefunction(call_func):
+
+tests/test_conformance.py: 26 warnings
+  /Users/tejamvsr/opensource/opentelemetry-python-genai/.claude/worktrees/agent-aacd31ae87ecdff9e/.tox/py314-test-instrumentation-genai-llama_index-conformance/lib/python3.14/site-packages/workflows/runtime/types/step_function.py:286: DeprecationWarning: 'asyncio.iscoroutinefunction' is deprecated and slated for removal in Python 3.16; use inspect.iscoroutinefunction() instead
+    if not asyncio.iscoroutinefunction(call_func):
+
+tests/test_conformance.py::test_conformance[AgentScenario]
+  /Users/tejamvsr/opensource/opentelemetry-python-genai/.claude/worktrees/agent-aacd31ae87ecdff9e/.tox/py314-test-instrumentation-genai-llama_index-conformance/lib/python3.14/site-packages/llama_index/core/agent/workflow/react_agent.py:151: DeprecationWarning: is_running called from within a step; the workflow is always running inside a step. This usage is deprecated.
+    if ctx.is_running:
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+1 failed, 2 passed, 214 warnings in 22.61s
+py314-test-instrumentation-genai-llama_index-conformance: exit 1 (24.98 seconds) /Users/tejamvsr/opensource/opentelemetry-python-genai/.claude/worktrees/agent-aacd31ae87ecdff9e> pytest /Users/tejamvsr/opensource/opentelemetry-python-genai/.claude/worktrees/agent-aacd31ae87ecdff9e/instrumentation/opentelemetry-instrumentation-genai-llama-index/tests/test_conformance.py --vcr-record=none -q -rs -p no:cacheprovider pid=70471
+  py314-test-instrumentation-genai-llama_index-conformance: FAIL code 1 (24.99=setup[0.02]+cmd[24.98] seconds)
+  evaluation failed :( (25.08 seconds)
