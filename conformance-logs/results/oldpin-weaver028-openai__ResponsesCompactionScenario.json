@@ -1,0 +1,7 @@
+{
+  "scenario": "ResponsesCompactionScenario",
+  "module": "tests.conformance.responses_compaction",
+  "unexpected": [],
+  "unmet_expected": [],
+  "validate_error": null
+}

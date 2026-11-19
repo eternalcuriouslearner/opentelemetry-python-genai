@@ -1,0 +1,7 @@
+{
+  "scenario": "InferenceScenario",
+  "module": "tests.conformance.inference",
+  "unexpected": [],
+  "unmet_expected": [],
+  "validate_error": null
+}

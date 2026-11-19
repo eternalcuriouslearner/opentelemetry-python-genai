@@ -1,0 +1,7 @@
+{
+  "scenario": "GenerateContentServerToolCallingScenario",
+  "module": "tests.conformance.server_tool_calling",
+  "unexpected": [],
+  "unmet_expected": [],
+  "validate_error": null
+}

@@ -1,0 +1,7 @@
+{
+  "scenario": "ChatCompletionsMultimodalScenario",
+  "module": "tests.conformance.multimodal",
+  "unexpected": [],
+  "unmet_expected": [],
+  "validate_error": null
+}

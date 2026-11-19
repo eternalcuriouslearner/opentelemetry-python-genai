@@ -1,0 +1,54 @@
+py314-test-instrumentation-google-genai-conformance: commands[0]> pytest /Users/tejamvsr/opensource/opentelemetry-python-genai/.claude/worktrees/agent-aacd31ae87ecdff9e/instrumentation/opentelemetry-instrumentation-google-genai/tests/test_conformance.py --vcr-record=none -q -rs -p no:cacheprovider
+/Users/tejamvsr/opensource/opentelemetry-python-genai/.claude/worktrees/agent-aacd31ae87ecdff9e/.tox/py314-test-instrumentation-google-genai-conformance/lib/python3.14/site-packages/pytest_asyncio/plugin.py:306: PytestDeprecationWarning: The configuration option "asyncio_default_fixture_loop_scope" is unset.
+The event loop scope for asynchronous fixtures will default to the fixture scope. Future versions of pytest-asyncio will default the loop scope for asynchronous fixtures to "function" scope. Set the default fixture loop scope explicitly in order to avoid unexpected behavior in the future. Valid fixture loop scopes are: "function", "class", "module", "package", "session". Set it to "fixture-scope" to keep the current behavior.
+
+  warnings.warn(PytestDeprecationWarning(_DEFAULT_FIXTURE_LOOP_SCOPE_UNSET))
+============================= test session starts ==============================
+platform darwin -- Python 3.14.2, pytest-9.2.0, pluggy-1.7.0
+rootdir: /Users/tejamvsr/opensource/opentelemetry-python-genai/.claude/worktrees/agent-aacd31ae87ecdff9e
+configfile: pytest.ini
+plugins: vcr-1.0.2, anyio-4.16.0, asyncio-1.5.0
+asyncio: mode=Mode.STRICT, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
+collected 7 items
+
+instrumentation/opentelemetry-instrumentation-google-genai/tests/test_conformance.py::test_conformance[InferenceScenario] 
+-------------------------------- live log call ---------------------------------
+WARNING  opentelemetry.exporter.otlp.proto.grpc.exporter:exporter.py:486 Transient error StatusCode.UNAVAILABLE encountered while exporting metrics to localhost:64301, retrying in 0.91s. Error details: failed to connect to all addresses; last error: UNKNOWN: ipv4:127.0.0.1:64301: Failed to connect to remote host: Connection refused
+ERROR    opentelemetry.exporter.otlp.proto.grpc.exporter:exporter.py:475 Failed to export metrics to localhost:64301, error code: StatusCode.UNAVAILABLE, error details: failed to connect to all addresses; last error: UNKNOWN: ipv6:%5B::1%5D:64301: Failed to connect to remote host: Connection refused
+PASSED                                                                   [ 14%]
+instrumentation/opentelemetry-instrumentation-google-genai/tests/test_conformance.py::test_conformance[EmbeddingScenario] 
+-------------------------------- live log call ---------------------------------
+WARNING  opentelemetry.exporter.otlp.proto.grpc.exporter:exporter.py:486 Transient error StatusCode.UNAVAILABLE encountered while exporting metrics to localhost:64324, retrying in 0.88s. Error details: failed to connect to all addresses; last error: UNKNOWN: ipv4:127.0.0.1:64324: Failed to connect to remote host: Connection refused
+WARNING  opentelemetry.exporter.otlp.proto.grpc.exporter:exporter.py:486 Transient error StatusCode.UNAVAILABLE encountered while exporting metrics to localhost:64324, retrying in 1.62s. Error details: failed to connect to all addresses; last error: UNKNOWN: ipv4:127.0.0.1:64324: Failed to connect to remote host: Connection refused
+ERROR    opentelemetry.exporter.otlp.proto.grpc.exporter:exporter.py:475 Failed to export metrics to localhost:64324, error code: StatusCode.UNAVAILABLE, error details: failed to connect to all addresses; last error: UNKNOWN: ipv6:%5B::1%5D:64324: Failed to connect to remote host: Connection refused
+PASSED                                                                   [ 28%]
+instrumentation/opentelemetry-instrumentation-google-genai/tests/test_conformance.py::test_conformance[GenerateContentScenario] 
+-------------------------------- live log call ---------------------------------
+WARNING  opentelemetry.exporter.otlp.proto.grpc.exporter:exporter.py:486 Transient error StatusCode.UNAVAILABLE encountered while exporting metrics to localhost:64344, retrying in 0.84s. Error details: failed to connect to all addresses; last error: UNKNOWN: ipv4:127.0.0.1:64344: Failed to connect to remote host: Connection refused
+ERROR    opentelemetry.exporter.otlp.proto.grpc.exporter:exporter.py:475 Failed to export metrics to localhost:64344, error code: StatusCode.UNAVAILABLE, error details: failed to connect to all addresses; last error: UNKNOWN: ipv6:%5B::1%5D:64344: Failed to connect to remote host: Connection refused
+PASSED                                                                   [ 42%]
+instrumentation/opentelemetry-instrumentation-google-genai/tests/test_conformance.py::test_conformance[ToolCallingScenario] 
+-------------------------------- live log call ---------------------------------
+WARNING  google_genai.models:generate_content.py:5942 Direct use of automatic function calling (AFC) in Models.generate_content is not recommended. Instead, we recommend to use AFC in Chat.send_message. Similarly, direct use of AFC in Models.generate_content_stream is not recommended. Instead, we recommend to use AFC in Chat.send_message_stream.
+WARNING  opentelemetry.exporter.otlp.proto.grpc.exporter:exporter.py:486 Transient error StatusCode.UNAVAILABLE encountered while exporting metrics to localhost:64365, retrying in 0.93s. Error details: failed to connect to all addresses; last error: UNKNOWN: ipv4:127.0.0.1:64365: Failed to connect to remote host: Connection refused
+ERROR    opentelemetry.exporter.otlp.proto.grpc.exporter:exporter.py:475 Failed to export metrics to localhost:64365, error code: StatusCode.UNAVAILABLE, error details: failed to connect to all addresses; last error: UNKNOWN: ipv6:%5B::1%5D:64365: Failed to connect to remote host: Connection refused
+PASSED                                                                   [ 57%]
+instrumentation/opentelemetry-instrumentation-google-genai/tests/test_conformance.py::test_conformance[FetchResponseScenario] 
+-------------------------------- live log call ---------------------------------
+WARNING  opentelemetry.exporter.otlp.proto.grpc.exporter:exporter.py:486 Transient error StatusCode.UNAVAILABLE encountered while exporting metrics to localhost:64385, retrying in 0.91s. Error details: failed to connect to all addresses; last error: UNKNOWN: ipv4:127.0.0.1:64385: Failed to connect to remote host: Connection refused
+ERROR    opentelemetry.exporter.otlp.proto.grpc.exporter:exporter.py:475 Failed to export metrics to localhost:64385, error code: StatusCode.UNAVAILABLE, error details: failed to connect to all addresses; last error: UNKNOWN: ipv4:127.0.0.1:64385: Failed to connect to remote host: Connection refused
+PASSED                                                                   [ 71%]
+instrumentation/opentelemetry-instrumentation-google-genai/tests/test_conformance.py::test_conformance[GenerateContentServerToolCallingScenario] 
+-------------------------------- live log call ---------------------------------
+WARNING  opentelemetry.exporter.otlp.proto.grpc.exporter:exporter.py:486 Transient error StatusCode.UNAVAILABLE encountered while exporting metrics to localhost:64406, retrying in 1.05s. Error details: failed to connect to all addresses; last error: UNKNOWN: ipv4:127.0.0.1:64406: Failed to connect to remote host: Connection refused
+ERROR    opentelemetry.exporter.otlp.proto.grpc.exporter:exporter.py:475 Failed to export metrics to localhost:64406, error code: StatusCode.UNAVAILABLE, error details: failed to connect to all addresses; last error: UNKNOWN: ipv4:127.0.0.1:64406: Failed to connect to remote host: Connection refused
+PASSED                                                                   [ 85%]
+instrumentation/opentelemetry-instrumentation-google-genai/tests/test_conformance.py::test_conformance[InteractionsServerToolCallingScenario] 
+-------------------------------- live log call ---------------------------------
+WARNING  opentelemetry.exporter.otlp.proto.grpc.exporter:exporter.py:486 Transient error StatusCode.UNAVAILABLE encountered while exporting metrics to localhost:64425, retrying in 1.14s. Error details: failed to connect to all addresses; last error: UNKNOWN: ipv4:127.0.0.1:64425: Failed to connect to remote host: Connection refused
+ERROR    opentelemetry.exporter.otlp.proto.grpc.exporter:exporter.py:475 Failed to export metrics to localhost:64425, error code: StatusCode.UNAVAILABLE, error details: failed to connect to all addresses; last error: UNKNOWN: ipv4:127.0.0.1:64425: Failed to connect to remote host: Connection refused
+PASSED                                                                   [100%]
+
+============================== 7 passed in 51.24s ==============================
+  py314-test-instrumentation-google-genai-conformance: OK (52.14=setup[0.01]+cmd[52.13] seconds)
+  congratulations :) (52.22 seconds)

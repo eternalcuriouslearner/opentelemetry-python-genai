@@ -1,0 +1,7 @@
+{
+  "scenario": "ResponsesStreamScenario",
+  "module": "tests.conformance.responses_stream",
+  "unexpected": [],
+  "unmet_expected": [],
+  "validate_error": null
+}

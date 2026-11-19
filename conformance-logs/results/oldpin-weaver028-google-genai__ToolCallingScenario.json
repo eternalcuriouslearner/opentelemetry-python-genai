@@ -1,0 +1,7 @@
+{
+  "scenario": "ToolCallingScenario",
+  "module": "tests.conformance.tool_calling",
+  "unexpected": [],
+  "unmet_expected": [],
+  "validate_error": null
+}

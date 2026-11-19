@@ -26,3 +26,6 @@
 
 Rego re-check (policies/genai_span_validation.rego: invoke_workflow keyed/expected attr gen_ai.workflow.name -> gen_ai.agent.name, committed as experiment): with this change all 6 #1103 workflow scenarios (agno x3, langchain, llama_index, openai_agents) report both declared gen_ai.workflow.name ExpectedViolations as UNMET (declared but no longer seen), and no new violation appears. Logs: conformance-logs/regopatch-*.log
 
+
+Old-registry control (versions.env temporarily SEMCONV_GENAI_REF=94f432d7, weaver 0.28.0, new opentelemetry-python pin; not committed): google-genai 7 passed, openai 13 passed. Logs: conformance-logs/oldpin-weaver028-*.log
+

@@ -1,0 +1,7 @@
+{
+  "scenario": "ResponsesFetchScenario",
+  "module": "tests.conformance.responses_fetch",
+  "unexpected": [],
+  "unmet_expected": [],
+  "validate_error": null
+}

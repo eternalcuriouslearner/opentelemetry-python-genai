@@ -1,0 +1,7 @@
+{
+  "scenario": "ResponsesConversationScenario",
+  "module": "tests.conformance.responses_conversation",
+  "unexpected": [],
+  "unmet_expected": [],
+  "validate_error": null
+}

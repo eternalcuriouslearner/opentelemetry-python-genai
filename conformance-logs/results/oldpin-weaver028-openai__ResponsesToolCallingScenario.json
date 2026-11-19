@@ -1,0 +1,7 @@
+{
+  "scenario": "ResponsesToolCallingScenario",
+  "module": "tests.conformance.responses_tool_calling",
+  "unexpected": [],
+  "unmet_expected": [],
+  "validate_error": null
+}

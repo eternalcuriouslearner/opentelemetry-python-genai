@@ -1,0 +1,7 @@
+{
+  "scenario": "InferenceStreamingScenario",
+  "module": "tests.conformance.inference_streaming",
+  "unexpected": [],
+  "unmet_expected": [],
+  "validate_error": null
+}

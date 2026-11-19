@@ -1,0 +1,7 @@
+{
+  "scenario": "GenerateContentScenario",
+  "module": "tests.conformance.generate_content",
+  "unexpected": [],
+  "unmet_expected": [],
+  "validate_error": null
+}
