@@ -31,7 +31,7 @@ Totals: 10 FAIL, 4 PASS, 0 skip, 0 hung. 63 failing scenarios.
 Extra runs:
 
 - **Rego re-check** (uncommitted local edit to `policies/genai_span_validation.rego`: invoke_workflow keyed/expected attr `gen_ai.workflow.name` -> `gen_ai.agent.name`): all 6 #1103 workflow scenarios (agno x3, langchain, llama_index, openai_agents) report both declared `gen_ai.workflow.name` ExpectedViolations as UNMET ("declared but no longer seen"), with no new violation. Logs: `conformance-logs/regopatch-*.log`.
-- **Old-registry control** (uncommitted local edit `SEMCONV_GENAI_REF=94f432d7`, weaver 0.28.0, new opentelemetry-python pin): google-genai 7 passed, openai 13 passed. Weaver 0.28 + the new test-util pin are green on the current registry. Logs: `conformance-logs/oldpin-weaver028-*.log`.
+- **Old-registry control** (uncommitted local edit `SEMCONV_GENAI_REF=94f432d7`, weaver 0.28.0, new opentelemetry-python pin): google-genai 7 passed, openai 13 passed. Weaver 0.28 + the new test-util pin are green on the old 94f432d7 registry that main pins today. Logs: `conformance-logs/oldpin-weaver028-*.log`.
 
 ## 2. Harness prerequisites
 
