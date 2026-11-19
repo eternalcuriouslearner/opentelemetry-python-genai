@@ -21,3 +21,4 @@
 | py314-test-instrumentation-genai-llama_index-conformance | PASS | 3 passed (23s) | WorkflowScenario's #1103 workflow.name expectations still met |
 | py314-test-instrumentation-genai-qwen-agent-conformance | PASS | 1 passed (11s) | InvokeAgentScenario |
 | py314-test-instrumentation-genai-portkey-conformance | FAIL | 3 failed (25s) | token.usage + chunk rename only |
+| py314-test-instrumentation-genai-ollama-conformance | FAIL | 4 failed (30s) | token.usage only |
