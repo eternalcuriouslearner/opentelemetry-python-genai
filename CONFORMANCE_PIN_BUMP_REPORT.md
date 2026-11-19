@@ -11,3 +11,4 @@
 |---|---|---|---|
 | py314-test-instrumentation-genai-openai-conformance | FAIL | 12 failed, 1 passed (112s) | gen_ai.client.token.usage / gen_ai.token.type gone from registry; time_to_first_chunk / time_per_output_chunk renamed; only ResponsesFetchScenario passes |
 | py314-test-instrumentation-genai-openai_agents-conformance | PASS | 1 passed (10s) | OrchestrationScenario; #1103's declared gen_ai.workflow.name violations are still SEEN (they come from repo policies/genai_span_validation.rego, not the registry) |
+| py314-test-instrumentation-google-genai-conformance | FAIL | 6 failed, 1 passed (56s) | token.usage removal only; FetchResponseScenario passes |
