@@ -1,0 +1,7 @@
+{
+  "scenario": "ColBERTv2Scenario",
+  "module": "tests.conformance.retrieve",
+  "unexpected": [],
+  "unmet_expected": [],
+  "validate_error": null
+}

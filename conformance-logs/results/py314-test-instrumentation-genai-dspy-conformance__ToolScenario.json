@@ -1,0 +1,7 @@
+{
+  "scenario": "ToolScenario",
+  "module": "tests.conformance.tool",
+  "unexpected": [],
+  "unmet_expected": [],
+  "validate_error": null
+}

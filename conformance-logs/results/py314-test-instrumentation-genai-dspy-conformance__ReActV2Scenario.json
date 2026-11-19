@@ -1,0 +1,7 @@
+{
+  "scenario": "ReActV2Scenario",
+  "module": "tests.conformance.react_v2",
+  "unexpected": [],
+  "unmet_expected": [],
+  "validate_error": null
+}

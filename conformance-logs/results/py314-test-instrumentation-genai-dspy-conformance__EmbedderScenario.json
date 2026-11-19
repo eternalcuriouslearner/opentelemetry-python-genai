@@ -1,0 +1,7 @@
+{
+  "scenario": "EmbedderScenario",
+  "module": "tests.conformance.embedder",
+  "unexpected": [],
+  "unmet_expected": [],
+  "validate_error": null
+}
