@@ -22,3 +22,4 @@
 | py314-test-instrumentation-genai-qwen-agent-conformance | PASS | 1 passed (11s) | InvokeAgentScenario |
 | py314-test-instrumentation-genai-portkey-conformance | FAIL | 3 failed (25s) | token.usage + chunk rename only |
 | py314-test-instrumentation-genai-ollama-conformance | FAIL | 4 failed (30s) | token.usage only |
+| py313-test-instrumentation-genai-qwenpaw-conformance | PASS | 1 passed (16s) | InvokeAgentScenario |

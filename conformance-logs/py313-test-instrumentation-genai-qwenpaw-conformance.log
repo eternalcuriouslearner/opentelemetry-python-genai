@@ -1,0 +1,11 @@
+py313-test-instrumentation-genai-qwenpaw-conformance: venv> .venv/bin/uv venv -p cpython3.13 --allow-existing '--prompt=agent-aacd31ae87ecdff9e[py313-test-instrumentation-genai-qwenpaw-conformance]' --python-preference system /Users/tejamvsr/opensource/opentelemetry-python-genai/.claude/worktrees/agent-aacd31ae87ecdff9e/.tox/py313-test-instrumentation-genai-qwenpaw-conformance
+py313-test-instrumentation-genai-qwenpaw-conformance: install_deps> .venv/bin/uv pip install 'pytest-asyncio>=0.24' 'pytest-vcr>=1.0.2' 'pytest>=8' -e util/opentelemetry-test-util-genai -r /Users/tejamvsr/opensource/opentelemetry-python-genai/.claude/worktrees/agent-aacd31ae87ecdff9e/dev-requirements-conformance.txt -r /Users/tejamvsr/opensource/opentelemetry-python-genai/.claude/worktrees/agent-aacd31ae87ecdff9e/instrumentation/opentelemetry-instrumentation-genai-qwenpaw/tests/requirements.latest.txt
+py313-test-instrumentation-genai-qwenpaw-conformance: commands[0]> pytest /Users/tejamvsr/opensource/opentelemetry-python-genai/.claude/worktrees/agent-aacd31ae87ecdff9e/instrumentation/opentelemetry-instrumentation-genai-qwenpaw/tests/test_conformance.py --vcr-record=none -q -rs -p no:cacheprovider
+/Users/tejamvsr/opensource/opentelemetry-python-genai/.claude/worktrees/agent-aacd31ae87ecdff9e/.tox/py313-test-instrumentation-genai-qwenpaw-conformance/lib/python3.13/site-packages/pytest_asyncio/plugin.py:306: PytestDeprecationWarning: The configuration option "asyncio_default_fixture_loop_scope" is unset.
+The event loop scope for asynchronous fixtures will default to the fixture scope. Future versions of pytest-asyncio will default the loop scope for asynchronous fixtures to "function" scope. Set the default fixture loop scope explicitly in order to avoid unexpected behavior in the future. Valid fixture loop scopes are: "function", "class", "module", "package", "session". Set it to "fixture-scope" to keep the current behavior.
+
+  warnings.warn(PytestDeprecationWarning(_DEFAULT_FIXTURE_LOOP_SCOPE_UNSET))
+.                                                                        [100%]
+1 passed in 15.88s
+  py313-test-instrumentation-genai-qwenpaw-conformance: OK (26.76=setup[7.63]+cmd[19.13] seconds)
+  congratulations :) (26.85 seconds)
