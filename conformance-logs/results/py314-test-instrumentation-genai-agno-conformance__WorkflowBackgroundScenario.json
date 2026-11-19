@@ -1,0 +1,7 @@
+{
+  "scenario": "WorkflowBackgroundScenario",
+  "module": "tests.conformance.workflow_background",
+  "unexpected": [],
+  "unmet_expected": [],
+  "validate_error": null
+}

@@ -1,0 +1,7 @@
+{
+  "scenario": "WorkflowStreamingScenario",
+  "module": "tests.conformance.workflow_streaming",
+  "unexpected": [],
+  "unmet_expected": [],
+  "validate_error": null
+}
