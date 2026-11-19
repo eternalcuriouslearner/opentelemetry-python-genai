@@ -1,0 +1,34 @@
+py314-test-instrumentation-genai-qwen-agent-conformance: venv> .venv/bin/uv venv -p cpython3.14 --allow-existing '--prompt=agent-aacd31ae87ecdff9e[py314-test-instrumentation-genai-qwen-agent-conformance]' --python-preference system /Users/tejamvsr/opensource/opentelemetry-python-genai/.claude/worktrees/agent-aacd31ae87ecdff9e/.tox/py314-test-instrumentation-genai-qwen-agent-conformance
+py314-test-instrumentation-genai-qwen-agent-conformance: install_deps> .venv/bin/uv pip install 'pytest-asyncio>=0.24' 'pytest-vcr>=1.0.2' 'pytest>=8' -e util/opentelemetry-test-util-genai -r /Users/tejamvsr/opensource/opentelemetry-python-genai/.claude/worktrees/agent-aacd31ae87ecdff9e/dev-requirements-conformance.txt -r /Users/tejamvsr/opensource/opentelemetry-python-genai/.claude/worktrees/agent-aacd31ae87ecdff9e/instrumentation/opentelemetry-instrumentation-genai-qwen-agent/tests/requirements.latest.txt
+py314-test-instrumentation-genai-qwen-agent-conformance: commands[0]> pytest /Users/tejamvsr/opensource/opentelemetry-python-genai/.claude/worktrees/agent-aacd31ae87ecdff9e/instrumentation/opentelemetry-instrumentation-genai-qwen-agent/tests/test_conformance.py --vcr-record=none -q -rs -p no:cacheprovider
+/Users/tejamvsr/opensource/opentelemetry-python-genai/.claude/worktrees/agent-aacd31ae87ecdff9e/.tox/py314-test-instrumentation-genai-qwen-agent-conformance/lib/python3.14/site-packages/pytest_asyncio/plugin.py:306: PytestDeprecationWarning: The configuration option "asyncio_default_fixture_loop_scope" is unset.
+The event loop scope for asynchronous fixtures will default to the fixture scope. Future versions of pytest-asyncio will default the loop scope for asynchronous fixtures to "function" scope. Set the default fixture loop scope explicitly in order to avoid unexpected behavior in the future. Valid fixture loop scopes are: "function", "class", "module", "package", "session". Set it to "fixture-scope" to keep the current behavior.
+
+  warnings.warn(PytestDeprecationWarning(_DEFAULT_FIXTURE_LOOP_SCOPE_UNSET))
+============================= test session starts ==============================
+platform darwin -- Python 3.14.2, pytest-9.2.0, pluggy-1.7.0
+rootdir: /Users/tejamvsr/opensource/opentelemetry-python-genai/.claude/worktrees/agent-aacd31ae87ecdff9e
+configfile: pytest.ini
+plugins: vcr-1.0.2, anyio-4.16.0, asyncio-1.5.0
+asyncio: mode=Mode.STRICT, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
+collected 1 item
+
+instrumentation/opentelemetry-instrumentation-genai-qwen-agent/tests/test_conformance.py::test_conformance[InvokeAgentScenario] 
+-------------------------------- live log call ---------------------------------
+WARNING  opentelemetry.exporter.otlp.proto.grpc.exporter:exporter.py:486 Transient error StatusCode.UNAVAILABLE encountered while exporting metrics to localhost:63450, retrying in 1.13s. Error details: failed to connect to all addresses; last error: UNKNOWN: ipv4:127.0.0.1:63450: Failed to connect to remote host: Connection refused
+ERROR    opentelemetry.exporter.otlp.proto.grpc.exporter:exporter.py:475 Failed to export metrics to localhost:63450, error code: StatusCode.UNAVAILABLE, error details: failed to connect to all addresses; last error: UNKNOWN: ipv6:%5B::1%5D:63450: Failed to connect to remote host: Connection refused
+PASSED                                                                   [100%]
+
+=============================== warnings summary ===============================
+.tox/py314-test-instrumentation-genai-qwen-agent-conformance/lib/python3.14/site-packages/_pytest/config/__init__.py:915
+  /Users/tejamvsr/opensource/opentelemetry-python-genai/.claude/worktrees/agent-aacd31ae87ecdff9e/.tox/py314-test-instrumentation-genai-qwen-agent-conformance/lib/python3.14/site-packages/_pytest/config/__init__.py:915: PytestAssertRewriteWarning: Module already imported so cannot be rewritten; opentelemetry.test_util_genai.vcr
+    self.import_plugin(import_spec, consider_entry_points=True)
+
+.tox/py314-test-instrumentation-genai-qwen-agent-conformance/lib/python3.14/site-packages/qwen_agent/tools/code_interpreter.py:470
+  /Users/tejamvsr/opensource/opentelemetry-python-genai/.claude/worktrees/agent-aacd31ae87ecdff9e/.tox/py314-test-instrumentation-genai-qwen-agent-conformance/lib/python3.14/site-packages/qwen_agent/tools/code_interpreter.py:470: DeprecationWarning: 'asyncio.DefaultEventLoopPolicy' is deprecated and slated for removal in Python 3.16
+    _BasePolicy = asyncio.DefaultEventLoopPolicy
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+======================== 1 passed, 2 warnings in 11.09s ========================
+  py314-test-instrumentation-genai-qwen-agent-conformance: OK (16.11=setup[2.40]+cmd[13.71] seconds)
+  congratulations :) (16.20 seconds)

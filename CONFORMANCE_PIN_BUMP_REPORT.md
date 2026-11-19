@@ -19,3 +19,4 @@
 | py314-test-instrumentation-genai-dspy-conformance | FAIL | 2 failed, 7 passed (69s) | HostedEmbedder, LM fail on token.usage only |
 | py314-test-instrumentation-genai-langchain-conformance | FAIL | 11 failed, 1 passed (94s) | token.usage + chunk rename only; WorkflowScenario's #1103 workflow.name expectations still met |
 | py314-test-instrumentation-genai-llama_index-conformance | PASS | 3 passed (23s) | WorkflowScenario's #1103 workflow.name expectations still met |
+| py314-test-instrumentation-genai-qwen-agent-conformance | PASS | 1 passed (11s) | InvokeAgentScenario |

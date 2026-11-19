@@ -1,0 +1,7 @@
+{
+  "scenario": "InvokeAgentScenario",
+  "module": "tests.conformance.invoke_agent",
+  "unexpected": [],
+  "unmet_expected": [],
+  "validate_error": null
+}
